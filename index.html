@@ -1301,7 +1301,7 @@ function renderAcumulo10(){
     <div class="group-card">
       <div class="group-head" data-idx="${gi}">
         <div>
-          <div class="gtitle">${escapeHtml(g.uee)} <span style="color:var(--muted);font-weight:500;">— ${escapeHtml(g.municipio)}</span></div>
+          <div class="gtitle">${escapeHtml(g.uee)} <span style="color:var(--muted);font-weight:500;">— ${escapeHtml(g.municipio)} · Cód. ${escapeHtml(g.codUnidade)}</span></div>
           <div class="gsub">${modalidadeTag} · ${g.rows.length} disciplina(s) · ${pendentesGrupo > 0 ? `<span style="color:var(--warn);font-weight:700;">${pendentesGrupo} pendente(s)</span>` : `<span style="color:var(--ok);font-weight:700;">tudo reservado</span>`}</div>
         </div>
         <div class="gtotal">${g.total}h<small>carga total</small></div>
