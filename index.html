@@ -264,6 +264,12 @@
     .matricula-link{color:inherit !important;text-decoration:none !important;border-bottom:none !important;}
     #sfToast{display:none !important;}
 
+    .print-only-dashboard{display:block !important;margin-bottom:14px;}
+    .print-only-dashboard h1{font-size:16px;margin:0 0 3px;color:#122744;}
+    .print-only-dashboard .meta{font-size:11px;color:#444;}
+    .kpi,.card{break-inside:avoid;page-break-inside:avoid;}
+    table.breakdown .bar,table.breakdown th{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+
     .print-only{display:none;}
     body.printing-dados{background:#fff;}
     body.printing-dados > *:not(#printDadosRoot){display:none !important;}
@@ -357,8 +363,16 @@
 
   <!-- ===================== DASHBOARD ===================== -->
   <section class="view" id="view-dashboard">
-    <h2 class="section-title">Dashboard Geral</h2>
-    <p class="section-sub">Visão consolidada dos dados carregados.</p>
+    <div class="report-header no-print" style="margin-bottom:4px;">
+      <div>
+        <h2 class="section-title" style="margin-bottom:0;">Dashboard Geral</h2>
+        <p class="section-sub">Visão consolidada dos dados carregados.</p>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary btn-sm" id="btnImprimirDashboard">🖨️ Imprimir Dashboard</button>
+      </div>
+    </div>
+    <div id="dashPrintHeader" class="print-only-dashboard" style="display:none;"></div>
     <div id="dashboardEmpty" class="empty-state">
       <div class="big">📊</div>
       <div>Nenhum dado carregado ainda. Vá até a aba <b>Importar</b> para carregar a planilha.</div>
@@ -374,23 +388,23 @@
       <div class="two-col">
         <div class="card pad">
           <h2 class="section-title">Por Área / Eixo</h2>
-          <p class="section-sub">Clique em uma linha para ver só aquele conteúdo na aba Dados.</p>
+          <p class="section-sub no-print">Clique em uma linha para ver só aquele conteúdo na aba Dados.</p>
           <table class="breakdown" id="tblPorArea"></table>
         </div>
         <div class="card pad">
           <h2 class="section-title">Por Município</h2>
-          <p class="section-sub">Clique em uma linha para ver só aquele conteúdo na aba Dados.</p>
+          <p class="section-sub no-print">Clique em uma linha para ver só aquele conteúdo na aba Dados.</p>
           <table class="breakdown" id="tblPorMunicipio"></table>
         </div>
       </div>
       <div class="card pad" style="margin-top:18px;">
         <h2 class="section-title">Por Motivo da Vaga</h2>
-        <p class="section-sub">Clique em uma linha para ver só aquele conteúdo na aba Dados.</p>
+        <p class="section-sub no-print">Clique em uma linha para ver só aquele conteúdo na aba Dados.</p>
         <table class="breakdown" id="tblPorMotivo"></table>
       </div>
       <div class="card pad" style="margin-top:18px;">
         <h2 class="section-title">Por Unidade Escolar</h2>
-        <p class="section-sub">Clique em uma unidade para abrir a ficha completa só dela.</p>
+        <p class="section-sub no-print">Clique em uma unidade para abrir a ficha completa só dela.</p>
         <div class="breakdown-scroll">
           <table class="breakdown" id="tblPorUnidade"></table>
         </div>
@@ -1147,6 +1161,24 @@ function getSortedFilteredRecords(){
   }
   return data;
 }
+
+/* =========================================================
+   IMPRESSÃO DO DASHBOARD — imprime a visão consolidada atual
+   (KPIs + tabelas Por Área/Município/Motivo/Unidade)
+========================================================= */
+function imprimirDashboard(){
+  if(!STATE.records.length){
+    alert("Carregue a planilha na aba Importar antes de imprimir.");
+    return;
+  }
+  const dataStr = new Date().toLocaleString("pt-BR");
+  document.getElementById("dashPrintHeader").innerHTML = `
+    <h1>Sistema de Facilitação — Dashboard Geral</h1>
+    <div class="meta">Arquivo: ${escapeHtml(STATE.fileName || "-")} · Gerado em ${dataStr} · ${STATE.records.length} registro(s) carregado(s)</div>
+  `;
+  window.print();
+}
+document.getElementById("btnImprimirDashboard").addEventListener("click", imprimirDashboard);
 
 function imprimirDados(){
   if(!STATE.records.length){
