@@ -108,6 +108,12 @@
   table.breakdown tr.clickable-row:hover td{background:#eef3fb;}
   table.breakdown tr.clickable-row:hover td:first-child{color:var(--navy);font-weight:700;}
   .breakdown-scroll{max-height:280px;overflow-y:auto;}
+
+  .dash-mode-toggle{display:flex;gap:6px;margin-bottom:18px;background:#eef1f6;border-radius:9px;padding:4px;width:fit-content;}
+  .dash-mode-btn{border:none;background:transparent;padding:8px 16px;border-radius:7px;font-size:12.5px;font-weight:700;
+    color:var(--muted);cursor:pointer;transition:.12s;}
+  .dash-mode-btn:hover{color:var(--navy);}
+  .dash-mode-btn.active{background:var(--navy);color:#fff;box-shadow:var(--shadow);}
   .bar-wrap{background:#eef1f6;border-radius:4px;height:6px;width:100%;overflow:hidden;margin-top:4px;}
   .bar{background:var(--navy);height:100%;border-radius:4px;}
 
@@ -156,6 +162,10 @@
   .report-card.disabled:hover{transform:none;border-color:var(--border);}
   .badge-new{position:absolute;top:12px;right:12px;background:var(--gold);color:var(--navy3);font-size:9.5px;
     font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:.4px;}
+  .badge-cat{position:absolute;top:12px;right:12px;font-size:9px;font-weight:800;padding:3px 8px;
+    border-radius:20px;letter-spacing:.3px;}
+  .badge-cat.cat-carencias{background:#e3e9f5;color:var(--navy);}
+  .badge-cat.cat-reservas{background:var(--ok-bg);color:var(--ok);}
 
   .report-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
   .report-header .back{cursor:pointer;color:var(--navy);font-size:13px;font-weight:600;}
@@ -369,6 +379,23 @@
         <tr><td>MAT / VESP / NOT / Total</td><td>Carga horária da vaga por turno (Matutino, Vespertino, Noturno) e o somatório.</td></tr>
       </table>
     </div>
+
+    <div class="card pad" style="margin-top:28px;border-top:3px solid var(--gold);">
+      <h2 class="section-title">Importação da Relação de Vagas Reservadas</h2>
+      <p class="section-sub">Banco separado do de Carências. Use para o arquivo "RELAÇÃO DE VAGAS RESERVADAS" (também .xls/HTML). Alimenta a visão de Vagas Reservadas no Dashboard e os relatórios marcados como "VAGAS RESERVADAS".</p>
+      <div class="dropzone" id="dropzoneReservas">
+        <div class="icon">📄</div>
+        <div><b>Clique para selecionar</b> ou arraste o arquivo de Vagas Reservadas aqui</div>
+        <div class="small">Formatos aceitos: .xls (HTML), .html, .htm</div>
+        <input type="file" id="fileInputReservas" accept=".xls,.html,.htm">
+      </div>
+      <div id="importStatusReservas"></div>
+      <table class="info-summary" id="importInfoReservas" style="display:none;"></table>
+      <div id="colunasDetectadasReservas" style="display:none;margin-top:12px;font-size:12px;color:var(--muted);"></div>
+      <div style="margin-top:16px;display:flex;gap:10px;">
+        <button class="btn btn-danger" id="btnClearDataReservas" style="display:none;">🗑️ Limpar dados de Vagas Reservadas</button>
+      </div>
+    </div>
   </section>
 
   <!-- ===================== DASHBOARD ===================== -->
@@ -383,11 +410,18 @@
       </div>
     </div>
     <div id="dashPrintHeader" class="print-only-dashboard" style="display:none;"></div>
+
+    <div class="dash-mode-toggle no-print" id="dashModeToggle" style="display:none;">
+      <button class="dash-mode-btn" data-mode="carencias">📋 Carências</button>
+      <button class="dash-mode-btn" data-mode="reservas">✅ Vagas Reservadas</button>
+    </div>
+
     <div id="dashboardEmpty" class="empty-state">
       <div class="big">📊</div>
-      <div>Nenhum dado carregado ainda. Vá até a aba <b>Importar</b> para carregar a planilha.</div>
+      <div>Nenhum dado carregado ainda. Vá até a aba <b>Importar</b> para carregar a planilha de Carências e/ou de Vagas Reservadas.</div>
     </div>
-    <div id="dashboardContent" style="display:none;">
+
+    <div id="dashboardContentCarencias" style="display:none;">
       <div class="kpi-grid">
         <div class="kpi gold"><div class="label">Total de Vagas</div><div class="value" id="kpiVagas">0</div><div class="sub">registros na planilha</div></div>
         <div class="kpi"><div class="label">Carga Horária Total</div><div class="value" id="kpiCarga">0</div><div class="sub">horas/aula somadas</div></div>
@@ -417,6 +451,38 @@
         <p class="section-sub no-print">Clique em uma unidade para abrir a ficha completa só dela.</p>
         <div class="breakdown-scroll">
           <table class="breakdown" id="tblPorUnidade"></table>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashboardContentReservas" style="display:none;">
+      <div class="kpi-grid">
+        <div class="kpi gold"><div class="label">Vagas Reservadas</div><div class="value" id="kpiRVagas">0</div><div class="sub">registros na planilha</div></div>
+        <div class="kpi"><div class="label">Carga Horária Total</div><div class="value" id="kpiRCarga">0</div><div class="sub">horas/aula somadas</div></div>
+        <div class="kpi"><div class="label">Municípios</div><div class="value" id="kpiRMunicipios">0</div><div class="sub">municípios distintos</div></div>
+        <div class="kpi"><div class="label">Unidades Escolares</div><div class="value" id="kpiRUnidades">0</div><div class="sub">unidades com vaga reservada</div></div>
+        <div class="kpi"><div class="label">Cursos/Eixos distintos</div><div class="value" id="kpiRCursos">0</div><div class="sub">cursos envolvidos</div></div>
+      </div>
+      <div class="two-col">
+        <div class="card pad">
+          <h2 class="section-title">Por Município</h2>
+          <table class="breakdown" id="tblRPorMunicipio"></table>
+        </div>
+        <div class="card pad">
+          <h2 class="section-title">Por Curso</h2>
+          <table class="breakdown" id="tblRPorCurso"></table>
+        </div>
+      </div>
+      <div class="card pad" style="margin-top:18px;">
+        <h2 class="section-title">Por Unidade Escolar</h2>
+        <div class="breakdown-scroll">
+          <table class="breakdown" id="tblRPorUnidade"></table>
+        </div>
+      </div>
+      <div class="card pad" style="margin-top:18px;">
+        <h2 class="section-title">Por Disciplina</h2>
+        <div class="breakdown-scroll">
+          <table class="breakdown" id="tblRPorDisciplina"></table>
         </div>
       </div>
     </div>
@@ -462,27 +528,34 @@
       <p class="section-sub">Selecione um relatório para gerar. Novos módulos podem ser adicionados sob demanda.</p>
       <div class="report-grid">
         <div class="report-card" data-report="acumulo10">
+          <span class="badge-cat cat-carencias">CARÊNCIAS</span>
           <div class="rc-icon">🧮</div>
           <h3>Reserva por Acúmulo de Carga (≥10h)</h3>
           <p>Agrupa disciplinas da mesma Área (Educação Básica) ou do mesmo Eixo/Curso (Educação Profissional) dentro de cada unidade e sinaliza os grupos cujo somatório de carga horária atinge 10h ou mais, indicados para reserva.</p>
         </div>
         <div class="report-card" data-report="hierarquia">
-          <span class="badge-new">NOVO</span>
+          <span class="badge-cat cat-carencias">CARÊNCIAS</span>
           <div class="rc-icon">🗂️</div>
           <h3>Município → Disciplina → Unidade</h3>
           <p>Navegação em árvore: expanda o município, depois a disciplina, e veja em quais unidades escolares ela aparece, com carga, motivo e servidor.</p>
         </div>
         <div class="report-card" data-report="motivo">
-          <span class="badge-new">NOVO</span>
+          <span class="badge-cat cat-carencias">CARÊNCIAS</span>
           <div class="rc-icon">📌</div>
           <h3>Relatório por Motivo de Afastamento</h3>
           <p>Agrupa todas as vagas pelo motivo (licença prêmio, gestante, médica, interesse particular, aposentadoria, aprazamento etc.), com totais e detalhamento por município/unidade/servidor.</p>
         </div>
         <div class="report-card" data-report="unidade">
-          <span class="badge-new">NOVO</span>
+          <span class="badge-cat cat-carencias">CARÊNCIAS</span>
           <div class="rc-icon">🏫</div>
           <h3>Ficha por Unidade Escolar</h3>
           <p>Ficha consolidada de cada unidade: total de vagas, carga horária, distribuição por tipo e por área/eixo, percentual reservado e lista completa de disciplinas.</p>
+        </div>
+        <div class="report-card" data-report="reservasUnidade">
+          <span class="badge-cat cat-reservas">VAGAS RESERVADAS</span>
+          <div class="rc-icon">✅</div>
+          <h3>Vagas Reservadas por Unidade Escolar</h3>
+          <p>Relação completa de vagas já reservadas, agrupada por unidade escolar: disciplina, curso, nº do processo seletivo, matrícula do professor e observações.</p>
         </div>
         <div class="report-card disabled">
           <div class="rc-icon">➕</div>
@@ -617,6 +690,41 @@
         <div>Nenhum resultado para esse filtro.</div>
       </div>
     </div>
+
+    <!-- Relatório: Vagas Reservadas por Unidade Escolar -->
+    <div id="report-reservasUnidade" style="display:none;">
+      <div class="report-header">
+        <div class="back back-reservasUnidade">← Voltar aos relatórios</div>
+        <div class="actions no-print">
+          <button class="btn btn-outline btn-sm" id="btnExpandAllRUnidade">Expandir todos</button>
+          <button class="btn btn-outline btn-sm" id="btnCollapseAllRUnidade">Recolher todos</button>
+          <button class="btn btn-gold btn-sm" id="btnExportRUnidade">⬇ Exportar CSV</button>
+          <button class="btn btn-primary btn-sm" id="btnPrintRUnidade">🖨️ Imprimir / PDF</button>
+        </div>
+      </div>
+      <div class="card pad no-print" style="margin-bottom:16px;">
+        <h2 class="section-title">Vagas Reservadas por Unidade Escolar <span class="badge-cat cat-reservas" style="position:static;display:inline-block;vertical-align:middle;margin-left:8px;">VAGAS RESERVADAS</span></h2>
+        <p class="section-sub">Uma ficha por unidade, com a relação completa de vagas já reservadas: disciplina, curso, nº do processo seletivo, matrícula do professor e observações.</p>
+        <div class="kpi-grid" style="margin-top:14px;margin-bottom:0;">
+          <div class="kpi"><div class="label">Unidades</div><div class="value" id="ruUnidades">0</div></div>
+          <div class="kpi"><div class="label">Vagas Reservadas</div><div class="value" id="ruVagas">0</div></div>
+          <div class="kpi gold"><div class="label">Carga total</div><div class="value" id="ruCarga">0</div></div>
+          <div class="kpi"><div class="label">Cursos distintos</div><div class="value" id="ruCursos">0</div></div>
+        </div>
+      </div>
+      <div id="ruFocusBanner" class="card pad no-print" style="display:none;margin-bottom:16px;background:var(--warn-bg);border-color:#f0dfa0;">
+        <span style="font-size:13px;">📌 Mostrando apenas <b id="ruFocusName"></b>. </span>
+        <span style="cursor:pointer;color:var(--navy);font-weight:700;font-size:13px;" id="ruFocusClear">Ver todas as unidades →</span>
+      </div>
+      <div class="search-box no-print" id="ruBuscaWrap">
+        <input type="text" id="ruBusca" placeholder="🔎 Filtrar por unidade, município ou curso...">
+      </div>
+      <div id="ruFichas"></div>
+      <div id="ruEmpty" class="empty-state" style="display:none;">
+        <div class="big">🔍</div>
+        <div>Nenhum resultado para esse filtro.</div>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -697,6 +805,17 @@ let STATE = {
 };
 let sortState = { col: null, dir: 1 };
 let unidadeFocusCode = null;   // quando setado, o relatório "Ficha por Unidade Escolar" mostra só essa unidade
+let reservaUnidadeFocusCode = null; // idem, para "Vagas Reservadas por Unidade Escolar"
+
+/* Banco separado: Vagas Reservadas (RELAÇÃO DE VAGAS RESERVADAS) */
+const RESERVAS_STORAGE_KEY = "sf_reservas_v1";
+let STATE_RESERVAS = {
+  fileName: null,
+  importedAt: null,
+  records: [],       // { identificador, municipio, unidadeEscolar, codUnidade, disciplina, mat, vesp, not, total, numProcesso, numProfessor, disciplinaPrincipal, curso, observacoes, _id }
+  colunasDetectadas: null
+};
+let dashboardModo = "carencias"; // "carencias" | "reservas" — controla qual visão o Dashboard mostra
 
 /* =========================================================
    PERSISTÊNCIA (localStorage)
@@ -704,7 +823,10 @@ let unidadeFocusCode = null;   // quando setado, o relatório "Ficha por Unidade
 function saveState(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
-  }catch(e){ console.warn("Falha ao salvar localStorage", e); }
+  }catch(e){
+    console.warn("Falha ao salvar localStorage", e);
+    showToast("⚠ Não consegui salvar os dados no navegador (armazenamento cheio ou bloqueado). Recomendo manter o arquivo original.");
+  }
 }
 function loadState(){
   try{
@@ -714,6 +836,23 @@ function loadState(){
       if(parsed && Array.isArray(parsed.records)) STATE = parsed;
     }
   }catch(e){ console.warn("Falha ao carregar localStorage", e); }
+}
+function saveStateReservas(){
+  try{
+    localStorage.setItem(RESERVAS_STORAGE_KEY, JSON.stringify(STATE_RESERVAS));
+  }catch(e){
+    console.warn("Falha ao salvar localStorage (reservas)", e);
+    showToast("⚠ Não consegui salvar os dados de Vagas Reservadas no navegador.");
+  }
+}
+function loadStateReservas(){
+  try{
+    const raw = localStorage.getItem(RESERVAS_STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && Array.isArray(parsed.records)) STATE_RESERVAS = parsed;
+    }
+  }catch(e){ console.warn("Falha ao carregar localStorage (reservas)", e); }
 }
 
 /* =========================================================
@@ -800,6 +939,189 @@ function renderImportInfo(){
     <tr><td>Total de registros</td><td>${STATE.records.length}</td></tr>
   `;
   document.getElementById("btnClearData").style.display = "inline-flex";
+}
+
+/* =========================================================
+   VAGAS RESERVADAS — banco separado (parser tolerante a células
+   mescladas/rowspan, mapeamento de colunas pelo texto do cabeçalho)
+========================================================= */
+function normalizeHeader(s){
+  return String(s ?? "")
+    .toUpperCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/[ºª°]/g, "")
+    .trim();
+}
+
+// Converte a tabela HTML em uma grade (array de arrays), preenchendo
+// células mescladas via rowspan/colspan para baixo/direita.
+function parseHtmlTableToGrid(text){
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  const rows = Array.from(doc.querySelectorAll("tr"));
+  const grid = [];
+  const pending = {}; // colIndex -> {remaining, value}
+  rows.forEach(tr=>{
+    const cells = Array.from(tr.children).filter(el => el.tagName === "TD" || el.tagName === "TH");
+    const rowArr = [];
+    let col = 0;
+    const fillPending = ()=>{
+      while(pending[col] && pending[col].remaining > 0){
+        rowArr[col] = pending[col].value;
+        pending[col].remaining--;
+        if(pending[col].remaining <= 0) delete pending[col];
+        col++;
+      }
+    };
+    fillPending();
+    cells.forEach(td=>{
+      fillPending();
+      const val = td.textContent.replace(/\s+/g," ").trim();
+      const colspan = parseInt(td.getAttribute("colspan")||"1",10) || 1;
+      const rowspan = parseInt(td.getAttribute("rowspan")||"1",10) || 1;
+      for(let c=0;c<colspan;c++){
+        rowArr[col] = val;
+        if(rowspan>1) pending[col] = { remaining: rowspan-1, value: val };
+        col++;
+      }
+      fillPending();
+    });
+    grid.push(rowArr);
+  });
+  return grid;
+}
+
+const RESERVAS_FIELD_MATCHERS = [
+  { field:"identificador", test:h=> h.includes("IDENTIFICADOR") },
+  { field:"numProcesso",   test:h=> h.includes("PROCESSO") || h.includes("COPS") },
+  { field:"numProfessor",  test:h=> h.includes("PROFESSOR") },
+  { field:"disciplinaPrincipal", test:h=> h.includes("DISCIPLINA") && h.includes("PRINCIPAL") },
+  { field:"codUnidade",    test:h=> h.includes("COD") && h.includes("UNIDADE") },
+  { field:"unidadeEscolar",test:h=> h.includes("UNIDADE") && h.includes("ESCOLAR") },
+  { field:"municipio",     test:h=> h.includes("MUNICIPIO") },
+  { field:"curso",         test:h=> h.includes("CURSO") },
+  { field:"observacoes",   test:h=> h.includes("OBSERVA") },
+  { field:"mat",           test:h=> h === "MAT" },
+  { field:"vesp",          test:h=> h === "VESP" },
+  { field:"not",           test:h=> h === "NOT" },
+  { field:"total",         test:h=> h.includes("TOTAL") || h === "TOT" },
+  { field:"disciplina",    test:h=> h.includes("DISCIPLINA") }, // por último: pega o que sobrar (não é "principal")
+];
+
+function detectRow(grid, i){ return grid[i] ? grid[i].map(normalizeHeader) : []; }
+
+function parseVagasReservadasText(text){
+  const grid = parseHtmlTableToGrid(text);
+  if(grid.length < 2) throw new Error("Estrutura de tabela não reconhecida (poucas linhas).");
+
+  // acha a linha de cabeçalho procurando "MUNICIPIO" e "DISCIPLINA" nas 4 primeiras linhas
+  let headerIdx = -1;
+  for(let i=0;i<Math.min(4, grid.length);i++){
+    const norm = detectRow(grid, i);
+    if(norm.some(h=>h.includes("MUNICIPIO")) && norm.some(h=>h.includes("DISCIPLINA"))){
+      headerIdx = i; break;
+    }
+  }
+  if(headerIdx === -1) throw new Error("Não encontrei o cabeçalho (colunas Município/Disciplina) nas primeiras linhas do arquivo.");
+
+  const headerNorm = detectRow(grid, headerIdx);
+  const colMap = {}; // field -> índice da coluna
+  headerNorm.forEach((h, idx)=>{
+    if(!h) return;
+    for(const m of RESERVAS_FIELD_MATCHERS){
+      if(m.test(h) && !(m.field in colMap)){ colMap[m.field] = idx; break; }
+    }
+  });
+
+  const detectadas = Object.entries(colMap).map(([field, idx])=> `${field} ← "${grid[headerIdx][idx]}"`);
+
+  const records = [];
+  let skipped = 0;
+  let last = { identificador:"", curso:"", disciplinaPrincipal:"" };
+  for(let i=headerIdx+1;i<grid.length;i++){
+    const row = grid[i];
+    if(!row || row.every(c=>!c || !String(c).trim())){ skipped++; continue; }
+    const get = f => (colMap[f] !== undefined ? (row[colMap[f]] ?? "").toString().trim() : "");
+
+    const municipio = get("municipio");
+    const disciplina = get("disciplina");
+    if(!municipio && !disciplina){ skipped++; continue; }
+
+    // colunas agrupadas (mescladas): se vier vazia, herda da última linha preenchida
+    let identificador = get("identificador"); if(identificador) last.identificador = identificador; else identificador = last.identificador;
+    let curso = get("curso"); if(curso && curso !== "-") last.curso = curso; else curso = curso || last.curso;
+    let disciplinaPrincipal = get("disciplinaPrincipal"); if(disciplinaPrincipal && disciplinaPrincipal !== "-") last.disciplinaPrincipal = disciplinaPrincipal; else disciplinaPrincipal = disciplinaPrincipal || last.disciplinaPrincipal;
+
+    const rec = {
+      identificador,
+      municipio,
+      unidadeEscolar: get("unidadeEscolar"),
+      codUnidade: get("codUnidade"),
+      disciplina,
+      mat: Number(get("mat")) || 0,
+      vesp: Number(get("vesp")) || 0,
+      not: Number(get("not")) || 0,
+      numProcesso: get("numProcesso"),
+      numProfessor: get("numProfessor"),
+      disciplinaPrincipal,
+      curso,
+      observacoes: get("observacoes"),
+      _id: "vr" + i
+    };
+    rec.total = Number(get("total")) || (rec.mat + rec.vesp + rec.not);
+    records.push(rec);
+  }
+
+  if(records.length === 0) throw new Error("Nenhum registro válido encontrado no arquivo.");
+  return { records, skipped, detectadas };
+}
+
+function handleFileReservas(file){
+  const status = document.getElementById("importStatusReservas");
+  status.innerHTML = `<span>Lendo arquivo…</span>`;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const { records, skipped, detectadas } = parseVagasReservadasText(e.target.result);
+      STATE_RESERVAS.fileName = file.name;
+      STATE_RESERVAS.importedAt = new Date().toISOString();
+      STATE_RESERVAS.records = records;
+      STATE_RESERVAS.colunasDetectadas = detectadas;
+      saveStateReservas();
+      status.innerHTML = `<span class="status-ok">✔ ${records.length} vaga(s) reservada(s) importada(s)${skipped ? ` (${skipped} linhas vazias/inválidas ignoradas)` : ""}.</span>`;
+      renderImportInfoReservas();
+      dashboardModo = "reservas";
+      refreshAllViews();
+    }catch(err){
+      status.innerHTML = `<span class="status-err">✖ Erro ao importar: ${err.message}</span>`;
+      console.error(err);
+    }
+  };
+  reader.onerror = function(){
+    status.innerHTML = `<span class="status-err">✖ Não foi possível ler o arquivo.</span>`;
+  };
+  reader.readAsText(file, "ISO-8859-1");
+}
+
+function renderImportInfoReservas(){
+  const info = document.getElementById("importInfoReservas");
+  if(!STATE_RESERVAS.records.length){ info.style.display="none"; document.getElementById("colunasDetectadasReservas").style.display="none"; return; }
+  info.style.display = "table";
+  const dt = new Date(STATE_RESERVAS.importedAt);
+  info.innerHTML = `
+    <tr><td>Arquivo</td><td>${escapeHtml(STATE_RESERVAS.fileName || "-")}</td></tr>
+    <tr><td>Importado em</td><td>${dt.toLocaleString("pt-BR")}</td></tr>
+    <tr><td>Total de vagas reservadas</td><td>${STATE_RESERVAS.records.length}</td></tr>
+  `;
+  document.getElementById("btnClearDataReservas").style.display = "inline-flex";
+
+  const det = document.getElementById("colunasDetectadasReservas");
+  if(STATE_RESERVAS.colunasDetectadas && STATE_RESERVAS.colunasDetectadas.length){
+    det.style.display = "block";
+    det.innerHTML = "<b>Colunas detectadas:</b> " + STATE_RESERVAS.colunasDetectadas.map(escapeHtml).join(" · ") +
+      "<br>Se algo parecer errado, me avise qual coluna saiu trocada que eu ajusto o mapeamento.";
+  } else {
+    det.style.display = "none";
+  }
 }
 
 /* =========================================================
@@ -932,6 +1254,35 @@ document.getElementById("btnClearData").addEventListener("click", ()=>{
   refreshAllViews();
 });
 
+const dropzoneReservas = document.getElementById("dropzoneReservas");
+const fileInputReservas = document.getElementById("fileInputReservas");
+dropzoneReservas.addEventListener("click", ()=> fileInputReservas.click());
+fileInputReservas.addEventListener("change", e=>{
+  if(e.target.files[0]) handleFileReservas(e.target.files[0]);
+});
+["dragenter","dragover"].forEach(ev=>{
+  dropzoneReservas.addEventListener(ev, e=>{ e.preventDefault(); dropzoneReservas.classList.add("drag"); });
+});
+["dragleave","drop"].forEach(ev=>{
+  dropzoneReservas.addEventListener(ev, e=>{ e.preventDefault(); dropzoneReservas.classList.remove("drag"); });
+});
+dropzoneReservas.addEventListener("drop", e=>{
+  const f = e.dataTransfer.files[0];
+  if(f) handleFileReservas(f);
+});
+document.getElementById("btnClearDataReservas").addEventListener("click", ()=>{
+  if(!confirm("Tem certeza que deseja apagar os dados de Vagas Reservadas?")) return;
+  STATE_RESERVAS = { fileName:null, importedAt:null, records:[], colunasDetectadas:null };
+  localStorage.removeItem(RESERVAS_STORAGE_KEY);
+  document.getElementById("importStatusReservas").innerHTML = "";
+  document.getElementById("importInfoReservas").style.display = "none";
+  document.getElementById("colunasDetectadasReservas").style.display = "none";
+  document.getElementById("btnClearDataReservas").style.display = "none";
+  fileInputReservas.value = "";
+  if(dashboardModo === "reservas") dashboardModo = "carencias";
+  refreshAllViews();
+});
+
 /* =========================================================
    TOPO — metadados
 ========================================================= */
@@ -944,11 +1295,32 @@ function refreshHeaderMeta(){
    DASHBOARD
 ========================================================= */
 function renderDashboard(){
-  const has = STATE.records.length > 0;
-  document.getElementById("dashboardEmpty").style.display = has ? "none" : "block";
-  document.getElementById("dashboardContent").style.display = has ? "block" : "none";
-  if(!has) return;
+  const hasCarencias = STATE.records.length > 0;
+  const hasReservas = STATE_RESERVAS.records.length > 0;
+  const hasAny = hasCarencias || hasReservas;
 
+  document.getElementById("dashboardEmpty").style.display = hasAny ? "none" : "block";
+
+  // seletor de modo: só aparece quando os dois bancos estão carregados
+  const toggle = document.getElementById("dashModeToggle");
+  if(hasCarencias && hasReservas){
+    toggle.style.display = "flex";
+  } else {
+    toggle.style.display = "none";
+    dashboardModo = hasReservas && !hasCarencias ? "reservas" : "carencias";
+  }
+  toggle.querySelectorAll(".dash-mode-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.mode === dashboardModo);
+  });
+
+  document.getElementById("dashboardContentCarencias").style.display = (hasCarencias && dashboardModo==="carencias") ? "block" : "none";
+  document.getElementById("dashboardContentReservas").style.display = (hasReservas && dashboardModo==="reservas") ? "block" : "none";
+
+  if(hasCarencias && dashboardModo==="carencias") renderDashboardCarencias();
+  if(hasReservas && dashboardModo==="reservas") renderDashboardReservas();
+}
+
+function renderDashboardCarencias(){
   const recs = STATE.records;
   const totalCarga = recs.reduce((s,r)=>s+r.total,0);
   const municipios = uniqueSorted(recs.map(r=>r.municipio));
@@ -967,6 +1339,32 @@ function renderDashboard(){
   renderBreakdown("tblPorMotivo", recs, r => r.motivo || "(não informado)", "Motivo da Vaga", "fMotivo");
   renderUnidadeBreakdown(recs);
 }
+
+function renderDashboardReservas(){
+  const recs = STATE_RESERVAS.records;
+  const totalCarga = recs.reduce((s,r)=>s+r.total,0);
+  const municipios = uniqueSorted(recs.map(r=>r.municipio));
+  const unidades = uniqueSorted(recs.map(r=>r.codUnidade));
+  const cursos = uniqueSorted(recs.map(r=>r.curso).filter(c=>c && c !== "-"));
+
+  document.getElementById("kpiRVagas").textContent = recs.length;
+  document.getElementById("kpiRCarga").textContent = totalCarga + "h";
+  document.getElementById("kpiRMunicipios").textContent = municipios.length;
+  document.getElementById("kpiRUnidades").textContent = unidades.length;
+  document.getElementById("kpiRCursos").textContent = cursos.length;
+
+  renderBreakdownSimple("tblRPorMunicipio", recs, r => r.municipio || "(não informado)", "Município");
+  renderBreakdownSimple("tblRPorCurso", recs, r => (r.curso && r.curso !== "-") ? r.curso : "(não informado)", "Curso");
+  renderBreakdownSimple("tblRPorUnidade", recs, r => r.unidadeEscolar || "(não informado)", "Unidade Escolar");
+  renderBreakdownSimple("tblRPorDisciplina", recs, r => r.disciplina || "(não informado)", "Disciplina");
+}
+
+document.querySelectorAll(".dash-mode-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    dashboardModo = btn.dataset.mode;
+    renderDashboard();
+  });
+});
 
 function renderBreakdown(tableId, recs, keyFn, label, filterId){
   const map = {};
@@ -991,6 +1389,27 @@ function renderBreakdown(tableId, recs, keyFn, label, filterId){
   table.querySelectorAll("tr.clickable-row").forEach(tr=>{
     tr.addEventListener("click", ()=> goToDadosFiltrado(filterId, tr.dataset.filterValue));
   });
+}
+
+function renderBreakdownSimple(tableId, recs, keyFn, label){
+  const map = {};
+  recs.forEach(r=>{
+    const k = keyFn(r);
+    if(!map[k]) map[k] = {count:0, carga:0};
+    map[k].count++;
+    map[k].carga += r.total;
+  });
+  const entries = Object.entries(map).sort((a,b)=>b[1].carga - a[1].carga);
+  const maxCarga = entries.length ? entries[0][1].carga : 1;
+  const table = document.getElementById(tableId);
+  let html = `<thead><tr><th>${label}</th><th>Vagas</th><th>Carga (h)</th><th></th></tr></thead><tbody>`;
+  entries.forEach(([k,v])=>{
+    const pct = Math.round(v.carga / maxCarga * 100);
+    html += `<tr><td>${escapeHtml(k)}</td><td>${v.count}</td><td>${v.carga}</td>
+      <td style="width:120px;"><div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div></td></tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
 }
 
 function renderUnidadeBreakdown(recs){
@@ -1271,16 +1690,23 @@ document.querySelectorAll(".report-card[data-report]").forEach(card=>{
 });
 document.querySelectorAll(".back").forEach(b=> b.addEventListener("click", showReportList));
 
-const REPORT_PANELS = ["report-acumulo10","report-hierarquia","report-motivo","report-unidade"];
+const REPORT_PANELS = ["report-acumulo10","report-hierarquia","report-motivo","report-unidade","report-reservasUnidade"];
 
 function showReportList(){
   unidadeFocusCode = null;
+  reservaUnidadeFocusCode = null;
   document.getElementById("reportList").style.display = "block";
   REPORT_PANELS.forEach(id=> document.getElementById(id).style.display = "none");
 }
 function showReport(name){
-  if(!STATE.records.length){
-    alert("Carregue a planilha na aba Importar antes de gerar relatórios.");
+  const precisaCarencias = ["acumulo10","hierarquia","motivo","unidade"].includes(name);
+  const precisaReservas = ["reservasUnidade"].includes(name);
+  if(precisaCarencias && !STATE.records.length){
+    alert("Carregue a planilha de Carências na aba Importar antes de gerar este relatório.");
+    return;
+  }
+  if(precisaReservas && !STATE_RESERVAS.records.length){
+    alert("Carregue a planilha de Vagas Reservadas na aba Importar antes de gerar este relatório.");
     return;
   }
   document.getElementById("reportList").style.display = "none";
@@ -1297,6 +1723,9 @@ function showReport(name){
   } else if(name === "unidade"){
     document.getElementById("report-unidade").style.display = "block";
     renderUnidade();
+  } else if(name === "reservasUnidade"){
+    document.getElementById("report-reservasUnidade").style.display = "block";
+    renderReservasUnidade();
   }
 }
 
@@ -1813,20 +2242,129 @@ function drawFichas(fichas, filter, forceOpen){
 }
 
 /* =========================================================
-   IMPRESSÃO — na Ficha por Unidade, imprime só as unidades
-   que estiverem abertas na tela (com o filtro de disciplina aplicado).
-   Nos relatórios de Motivo e de Acúmulo (≥10h), imprime só os
-   cartões (motivo/unidade) que estiverem abertos na tela.
+   RELATÓRIO: Vagas Reservadas por Unidade Escolar
+   (banco separado: STATE_RESERVAS)
 ========================================================= */
+function buildFichasReservas(){
+  const groups = {};
+  STATE_RESERVAS.records.forEach(r=>{
+    const key = r.codUnidade || r.unidadeEscolar;
+    if(!groups[key]) groups[key] = {
+      key, uee:r.unidadeEscolar, municipio:r.municipio, codUnidade:r.codUnidade,
+      rows:[], total:0
+    };
+    groups[key].rows.push(r);
+    groups[key].total += r.total;
+  });
+  return Object.values(groups).sort((a,b)=> b.total - a.total);
+}
+
+function renderReservasUnidade(){
+  const allFichas = buildFichasReservas();
+  const focusBanner = document.getElementById("ruFocusBanner");
+  const buscaWrap = document.getElementById("ruBuscaWrap");
+
+  let fichas = allFichas;
+  if(reservaUnidadeFocusCode){
+    const only = allFichas.find(f => f.codUnidade === reservaUnidadeFocusCode);
+    if(only){
+      fichas = [only];
+      focusBanner.style.display = "block";
+      document.getElementById("ruFocusName").textContent = `${only.uee} (${only.municipio})`;
+      buscaWrap.style.display = "none";
+    } else {
+      reservaUnidadeFocusCode = null;
+    }
+  }
+  if(!reservaUnidadeFocusCode){
+    focusBanner.style.display = "none";
+    buscaWrap.style.display = "block";
+  }
+  document.getElementById("ruFocusClear").onclick = ()=>{
+    reservaUnidadeFocusCode = null;
+    renderReservasUnidade();
+  };
+
+  const baseRecords = reservaUnidadeFocusCode ? fichas[0].rows : STATE_RESERVAS.records;
+  document.getElementById("ruUnidades").textContent = fichas.length;
+  document.getElementById("ruVagas").textContent = baseRecords.length;
+  document.getElementById("ruCarga").textContent = baseRecords.reduce((s,r)=>s+r.total,0) + "h";
+  document.getElementById("ruCursos").textContent = uniqueSorted(baseRecords.map(r=>r.curso).filter(c=>c && c!=="-")).length;
+
+  drawFichasReservas(fichas, "", !!reservaUnidadeFocusCode);
+  document.getElementById("ruBusca").oninput = (e)=> drawFichasReservas(fichas, e.target.value.trim().toLowerCase());
+  document.getElementById("btnExpandAllRUnidade").onclick = ()=> document.querySelectorAll("#ruFichas .ficha-body").forEach(b=>b.classList.add("open"));
+  document.getElementById("btnCollapseAllRUnidade").onclick = ()=> document.querySelectorAll("#ruFichas .ficha-body").forEach(b=>b.classList.remove("open"));
+  document.getElementById("btnPrintRUnidade").onclick = ()=> window.print();
+  document.getElementById("btnExportRUnidade").onclick = ()=>{
+    const header = ["Município","Unidade","Cód. Unidade","Identificador","Disciplina","Curso","Nº Processo","Nº Professor","MAT","VESP","NOT","Total","Observações"];
+    const rows = [header];
+    fichas.forEach(f=> f.rows.forEach(r=>{
+      rows.push([f.municipio,f.uee,f.codUnidade,r.identificador,r.disciplina,r.curso,r.numProcesso,r.numProfessor,r.mat,r.vesp,r.not,r.total,r.observacoes]);
+    }));
+    downloadCsv("vagas_reservadas_por_unidade.csv", rows);
+  };
+}
+
+function drawFichasReservas(fichas, filter, forceOpen){
+  const container = document.getElementById("ruFichas");
+  const emptyEl = document.getElementById("ruEmpty");
+
+  const filtered = filter
+    ? fichas.filter(f => (f.uee+" "+f.municipio+" "+f.rows.map(r=>r.curso).join(" ")).toLowerCase().includes(filter))
+    : fichas;
+
+  emptyEl.style.display = filtered.length ? "none" : "block";
+
+  container.innerHTML = filtered.map((f, fi)=>{
+    const rowsHtml = f.rows
+      .sort((a,b)=> b.total - a.total)
+      .map(r=>{
+        return `<tr>
+          <td>${escapeHtml(r.disciplina)}</td>
+          <td>${escapeHtml(r.curso) || "—"}</td>
+          <td>${escapeHtml(r.numProcesso) || "—"}</td>
+          <td>${matriculaCell(r.numProfessor)}</td>
+          <td>${r.mat}</td><td>${r.vesp}</td><td>${r.not}</td><td><b>${r.total}</b></td>
+          <td>${escapeHtml(r.observacoes) || "—"}</td>
+        </tr>`;
+      }).join("");
+
+    return `<div class="ficha">
+      <div class="ficha-head" data-idx="ru-${fi}">
+        <div>
+          <div class="t">${escapeHtml(f.uee)}</div>
+          <div class="s">${escapeHtml(f.municipio)} · Cód. ${escapeHtml(f.codUnidade)} · ${f.rows.length} vaga(s) reservada(s)</div>
+        </div>
+        <div class="g">${f.total}h</div>
+      </div>
+      <div class="ficha-body" id="fbody-ru-${fi}">
+        <table class="detail">
+          <thead><tr><th>Disciplina</th><th>Curso</th><th>Nº Processo</th><th>Matrícula</th><th>MAT</th><th>VESP</th><th>NOT</th><th>Total</th><th>Observações</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join("");
+
+  container.querySelectorAll(".ficha-head").forEach(h=>{
+    h.addEventListener("click", ()=> document.getElementById("fbody-"+h.dataset.idx).classList.toggle("open"));
+  });
+  if(filter || forceOpen){
+    container.querySelectorAll(".ficha-body").forEach(b=>b.classList.add("open"));
+  }
+}
+
+
 window.addEventListener("beforeprint", ()=>{
-  const algumaFichaAberta = document.querySelectorAll("#uniFichas .ficha-body.open").length > 0;
+  const algumaFichaAberta = document.querySelectorAll("#uniFichas .ficha-body.open, #ruFichas .ficha-body.open").length > 0;
   if(algumaFichaAberta){
-    document.querySelectorAll("#uniFichas .ficha").forEach(f=>{
+    document.querySelectorAll("#uniFichas .ficha, #ruFichas .ficha").forEach(f=>{
       const body = f.querySelector(".ficha-body");
       if(body && !body.classList.contains("open")) f.classList.add("print-hide");
     });
   } else {
-    document.querySelectorAll("#uniFichas .ficha-body").forEach(b=> b.classList.add("print-force-open"));
+    document.querySelectorAll("#uniFichas .ficha-body, #ruFichas .ficha-body").forEach(b=> b.classList.add("print-force-open"));
   }
   const algumGrupoAberto = document.querySelectorAll(".group-card .group-body.open").length > 0;
   if(algumGrupoAberto){
@@ -1839,7 +2377,7 @@ window.addEventListener("beforeprint", ()=>{
   }
 });
 window.addEventListener("afterprint", ()=>{
-  document.querySelectorAll("#uniFichas .ficha.print-hide").forEach(f=> f.classList.remove("print-hide"));
+  document.querySelectorAll("#uniFichas .ficha.print-hide, #ruFichas .ficha.print-hide").forEach(f=> f.classList.remove("print-hide"));
   document.querySelectorAll(".group-card.print-hide").forEach(c=> c.classList.remove("print-hide"));
   document.querySelectorAll(".print-force-open").forEach(el=> el.classList.remove("print-force-open"));
 });
@@ -1856,8 +2394,27 @@ function refreshAllViews(){
 }
 
 loadState();
-if(STATE.records.length) renderImportInfo();
+loadStateReservas();
+if(STATE.records.length){
+  renderImportInfo();
+  const dt = STATE.importedAt ? new Date(STATE.importedAt).toLocaleString("pt-BR") : "";
+  document.getElementById("importStatus").innerHTML =
+    `<span class="status-ok">✔ ${STATE.records.length} registros carregados automaticamente (sessão salva ${dt ? "em " + dt : "anteriormente"}).</span>`;
+}
+if(STATE_RESERVAS.records.length){
+  renderImportInfoReservas();
+  const dtR = STATE_RESERVAS.importedAt ? new Date(STATE_RESERVAS.importedAt).toLocaleString("pt-BR") : "";
+  document.getElementById("importStatusReservas").innerHTML =
+    `<span class="status-ok">✔ ${STATE_RESERVAS.records.length} vagas reservadas carregadas automaticamente (sessão salva ${dtR ? "em " + dtR : "anteriormente"}).</span>`;
+}
 refreshAllViews();
+if(STATE.records.length || STATE_RESERVAS.records.length){
+  switchTab("dashboard");
+  const partes = [];
+  if(STATE.records.length) partes.push(`${STATE.records.length} carências`);
+  if(STATE_RESERVAS.records.length) partes.push(`${STATE_RESERVAS.records.length} vagas reservadas`);
+  showToast(`Dados recuperados: ${partes.join(" · ")} da sua última sessão.`);
+}
 </script>
 </body>
 </html>
