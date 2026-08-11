@@ -130,6 +130,12 @@
     white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.3;}
   table.data tbody tr:nth-child(even){background:#fafbfd;}
   table.data tbody tr:hover{background:#eef3fb;}
+  table.data tfoot td{
+    position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:700;
+    padding:7px 6px;border-top:2px solid var(--gold);z-index:2;
+  }
+  table.data tfoot td.foot-num{color:var(--gold-l);text-align:left;}
+  table.data tfoot td.foot-label{color:#cfd9e8;font-weight:700;}
   table.data .tag{font-size:9.5px;padding:1px 6px;}
   .tag{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;}
   .tag-real{background:#e6f4ea;color:var(--ok);}
@@ -301,6 +307,10 @@
     table.print-table tbody tr:nth-child(even){
       background:#f7f9fc;-webkit-print-color-adjust:exact;print-color-adjust:exact;
     }
+    table.print-table tfoot tr.foot-row td{
+      border-top:2px solid #122744;background:#e8edf5;font-weight:700;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
   }
 </style>
 </head>
@@ -439,6 +449,7 @@
           <colgroup id="dataTableColgroup"></colgroup>
           <thead><tr id="dataTableHead"></tr></thead>
           <tbody id="dataTableBody"></tbody>
+          <tfoot><tr id="dataTableFoot"></tr></tfoot>
         </table>
       </div>
     </div>
@@ -1106,6 +1117,22 @@ function renderDataTable(){
     return `<tr>${tds}</tr>`;
   }).join("");
   body.innerHTML = rowsHtml || `<tr><td colspan="${cols.length || 1}" style="text-align:center;padding:24px;color:var(--muted);">Nenhum registro corresponde aos filtros.</td></tr>`;
+
+  // Linha de totais (soma MAT/VESP/NOT/Total dos registros filtrados)
+  const NUMERIC_SUM_COLS = ["mat","vesp","not","total"];
+  const foot = document.getElementById("dataTableFoot");
+  let labelPlaced = false;
+  foot.innerHTML = cols.map(c=>{
+    if(NUMERIC_SUM_COLS.includes(c.id)){
+      const sum = data.reduce((s,r)=> s + (r[c.id] || 0), 0);
+      return `<td class="foot-num">${sum}</td>`;
+    }
+    if(!labelPlaced){
+      labelPlaced = true;
+      return `<td class="foot-label">TOTAL — ${data.length} registro(s)</td>`;
+    }
+    return `<td></td>`;
+  }).join("");
 }
 
 ["fBusca","fMunicipio","fTipo","fReserva","fAreaEixo","fMotivo","fUnidade"].forEach(id=>{
@@ -1205,6 +1232,20 @@ function imprimirDados(){
     }).join("")}</tr>`;
   }).join("")}</tbody>`;
 
+  const NUMERIC_SUM_COLS = ["mat","vesp","not","total"];
+  let footLabelPlaced = false;
+  const tfootHtml = `<tfoot><tr class="foot-row">${cols.map(c=>{
+    if(NUMERIC_SUM_COLS.includes(c.id)){
+      const sum = data.reduce((s,r)=> s + (r[c.id] || 0), 0);
+      return `<td><b>${sum}</b></td>`;
+    }
+    if(!footLabelPlaced){
+      footLabelPlaced = true;
+      return `<td><b>TOTAL — ${data.length} registro(s)</b></td>`;
+    }
+    return `<td></td>`;
+  }).join("")}</tr></tfoot>`;
+
   document.getElementById("printDadosRoot").innerHTML = `
     <h1>Sistema de Facilitação — Relatório de Vagas (Base de Dados)</h1>
     <div class="meta">Arquivo: ${escapeHtml(STATE.fileName || "-")} · Gerado em ${dataStr} · ${data.length} de ${STATE.records.length} registro(s)</div>
@@ -1213,6 +1254,7 @@ function imprimirDados(){
       <colgroup>${colgroupHtml}</colgroup>
       ${theadHtml}
       ${tbodyHtml}
+      ${tfootHtml}
     </table>`;
 
   document.body.classList.add("printing-dados");
