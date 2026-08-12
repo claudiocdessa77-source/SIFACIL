@@ -716,8 +716,11 @@
         <span style="font-size:13px;">📌 Mostrando apenas <b id="ruFocusName"></b>. </span>
         <span style="cursor:pointer;color:var(--navy);font-weight:700;font-size:13px;" id="ruFocusClear">Ver todas as unidades →</span>
       </div>
-      <div class="search-box no-print" id="ruBuscaWrap">
-        <input type="text" id="ruBusca" placeholder="🔎 Filtrar por unidade, município ou curso...">
+      <div class="search-box no-print" id="ruBuscaWrap" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <input type="text" id="ruBusca" placeholder="🔎 Filtrar por unidade, município ou curso..." style="flex:1;min-width:220px;">
+        <select id="ruFiltroNte" style="padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;"><option value="">NTE (todos)</option></select>
+        <select id="ruFiltroMunicipio" style="padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;"><option value="">Município (todos)</option></select>
+        <select id="ruFiltroCop" style="padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;"><option value="">Nº COP (todos)</option></select>
       </div>
       <div id="ruFichas"></div>
       <div id="ruEmpty" class="empty-state" style="display:none;">
@@ -2313,8 +2316,24 @@ function renderReservasUnidade(){
   document.getElementById("ruCarga").textContent = baseRecords.reduce((s,r)=>s+r.total,0) + "h";
   document.getElementById("ruCursos").textContent = uniqueSorted(baseRecords.map(r=>r.curso).filter(c=>c && c!=="-")).length;
 
+  if(!reservaUnidadeFocusCode){
+    fillSelect("ruFiltroNte", uniqueSorted(STATE_RESERVAS.records.map(r=>r.nte)));
+    fillSelect("ruFiltroMunicipio", uniqueSorted(STATE_RESERVAS.records.map(r=>r.municipio)));
+    fillSelect("ruFiltroCop", uniqueSorted(STATE_RESERVAS.records.map(r=>r.numCop)));
+  }
+
+  const aplicarFiltrosReservas = ()=>{
+    const busca = document.getElementById("ruBusca").value.trim().toLowerCase();
+    const nte = document.getElementById("ruFiltroNte").value;
+    const municipio = document.getElementById("ruFiltroMunicipio").value;
+    const cop = document.getElementById("ruFiltroCop").value;
+    drawFichasReservas(fichas, busca, false, { nte, municipio, cop });
+  };
   drawFichasReservas(fichas, "", !!reservaUnidadeFocusCode);
-  document.getElementById("ruBusca").oninput = (e)=> drawFichasReservas(fichas, e.target.value.trim().toLowerCase());
+  document.getElementById("ruBusca").oninput = aplicarFiltrosReservas;
+  document.getElementById("ruFiltroNte").onchange = aplicarFiltrosReservas;
+  document.getElementById("ruFiltroMunicipio").onchange = aplicarFiltrosReservas;
+  document.getElementById("ruFiltroCop").onchange = aplicarFiltrosReservas;
   document.getElementById("btnExpandAllRUnidade").onclick = ()=> document.querySelectorAll("#ruFichas .ficha-body").forEach(b=>b.classList.add("open"));
   document.getElementById("btnCollapseAllRUnidade").onclick = ()=> document.querySelectorAll("#ruFichas .ficha-body").forEach(b=>b.classList.remove("open"));
   document.getElementById("btnPrintRUnidade").onclick = ()=> window.print();
@@ -2328,13 +2347,26 @@ function renderReservasUnidade(){
   };
 }
 
-function drawFichasReservas(fichas, filter, forceOpen){
+function drawFichasReservas(fichas, filter, forceOpen, extraFiltros){
   const container = document.getElementById("ruFichas");
   const emptyEl = document.getElementById("ruEmpty");
+  const fNte = extraFiltros?.nte || "";
+  const fMunicipio = extraFiltros?.municipio || "";
+  const fCop = extraFiltros?.cop || "";
 
-  const filtered = filter
-    ? fichas.filter(f => (f.uee+" "+f.municipio+" "+f.rows.map(r=>r.curso).join(" ")).toLowerCase().includes(filter))
-    : fichas;
+  let filtered = fichas;
+  if(filter){
+    filtered = filtered.filter(f => (f.uee+" "+f.municipio+" "+f.rows.map(r=>r.curso).join(" ")).toLowerCase().includes(filter));
+  }
+  if(fNte){
+    filtered = filtered.filter(f => (f.rows[0]?.nte || "") === fNte);
+  }
+  if(fMunicipio){
+    filtered = filtered.filter(f => f.municipio === fMunicipio);
+  }
+  if(fCop){
+    filtered = filtered.filter(f => f.rows.some(r=> r.numCop === fCop));
+  }
 
   emptyEl.style.display = filtered.length ? "none" : "block";
 
@@ -2373,7 +2405,7 @@ function drawFichasReservas(fichas, filter, forceOpen){
   container.querySelectorAll(".ficha-head").forEach(h=>{
     h.addEventListener("click", ()=> document.getElementById("fbody-"+h.dataset.idx).classList.toggle("open"));
   });
-  if(filter || forceOpen){
+  if(filter || fNte || fMunicipio || fCop || forceOpen){
     container.querySelectorAll(".ficha-body").forEach(b=>b.classList.add("open"));
   }
 }
