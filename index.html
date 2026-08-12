@@ -456,6 +456,10 @@
     </div>
 
     <div id="dashboardContentReservas" style="display:none;">
+      <div class="filters no-print" style="margin-bottom:16px;">
+        <select id="dashRNte"><option value="">NTE (todos)</option></select>
+        <select id="dashRMunicipio"><option value="">Município (todos)</option></select>
+      </div>
       <div class="kpi-grid">
         <div class="kpi gold"><div class="label">Vagas Reservadas</div><div class="value" id="kpiRVagas">0</div><div class="sub">registros na planilha</div></div>
         <div class="kpi"><div class="label">Carga Horária Total</div><div class="value" id="kpiRCarga">0</div><div class="sub">horas/aula somadas</div></div>
@@ -466,21 +470,25 @@
       <div class="two-col">
         <div class="card pad">
           <h2 class="section-title">Por Município</h2>
+          <p class="section-sub no-print">Clique em uma linha para ver as unidades daquele município.</p>
           <table class="breakdown" id="tblRPorMunicipio"></table>
         </div>
         <div class="card pad">
           <h2 class="section-title">Por Curso</h2>
+          <p class="section-sub no-print">Clique em uma linha para ver as unidades daquele curso.</p>
           <table class="breakdown" id="tblRPorCurso"></table>
         </div>
       </div>
       <div class="card pad" style="margin-top:18px;">
         <h2 class="section-title">Por Unidade Escolar</h2>
+        <p class="section-sub no-print">Clique em uma unidade para abrir a ficha completa só dela.</p>
         <div class="breakdown-scroll">
           <table class="breakdown" id="tblRPorUnidade"></table>
         </div>
       </div>
       <div class="card pad" style="margin-top:18px;">
         <h2 class="section-title">Por Disciplina</h2>
+        <p class="section-sub no-print">Clique em uma linha para ver as unidades daquela disciplina.</p>
         <div class="breakdown-scroll">
           <table class="breakdown" id="tblRPorDisciplina"></table>
         </div>
@@ -717,7 +725,7 @@
         <span style="cursor:pointer;color:var(--navy);font-weight:700;font-size:13px;" id="ruFocusClear">Ver todas as unidades →</span>
       </div>
       <div class="search-box no-print" id="ruBuscaWrap" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-        <input type="text" id="ruBusca" placeholder="🔎 Filtrar por unidade, município ou curso..." style="flex:1;min-width:220px;">
+        <input type="text" id="ruBusca" placeholder="🔎 Filtrar por unidade, município, curso ou disciplina..." style="flex:1;min-width:220px;">
         <select id="ruFiltroNte" style="padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;"><option value="">NTE (todos)</option></select>
         <select id="ruFiltroMunicipio" style="padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;"><option value="">Município (todos)</option></select>
         <select id="ruFiltroCop" style="padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;"><option value="">Nº COP (todos)</option></select>
@@ -1366,7 +1374,15 @@ function renderDashboardCarencias(){
 }
 
 function renderDashboardReservas(){
-  const recs = STATE_RESERVAS.records;
+  fillSelect("dashRNte", uniqueSorted(STATE_RESERVAS.records.map(r=>r.nte)));
+  fillSelect("dashRMunicipio", uniqueSorted(STATE_RESERVAS.records.map(r=>r.municipio)));
+
+  const fNte = document.getElementById("dashRNte").value;
+  const fMunicipio = document.getElementById("dashRMunicipio").value;
+  const recs = STATE_RESERVAS.records.filter(r=>
+    (!fNte || r.nte === fNte) && (!fMunicipio || r.municipio === fMunicipio)
+  );
+
   const totalCarga = recs.reduce((s,r)=>s+r.total,0);
   const municipios = uniqueSorted(recs.map(r=>r.municipio));
   const unidades = uniqueSorted(recs.map(r=>r.codUnidade));
@@ -1378,10 +1394,81 @@ function renderDashboardReservas(){
   document.getElementById("kpiRUnidades").textContent = unidades.length;
   document.getElementById("kpiRCursos").textContent = cursos.length;
 
-  renderBreakdownSimple("tblRPorMunicipio", recs, r => r.municipio || "(não informado)", "Município");
-  renderBreakdownSimple("tblRPorCurso", recs, r => (r.curso && r.curso !== "-") ? r.curso : "(não informado)", "Curso");
-  renderBreakdownSimple("tblRPorUnidade", recs, r => r.unidadeEscolar || "(não informado)", "Unidade Escolar");
-  renderBreakdownSimple("tblRPorDisciplina", recs, r => r.disciplina || "(não informado)", "Disciplina");
+  renderBreakdownReservasClick("tblRPorMunicipio", recs, r => r.municipio || "(não informado)", "Município",
+    key => goToReservasRelatorio({ municipio: key }));
+  renderBreakdownReservasClick("tblRPorCurso", recs, r => (r.curso && r.curso !== "-") ? r.curso : "(não informado)", "Curso",
+    key => goToReservasRelatorio({ curso: key }));
+  renderBreakdownReservasClick("tblRPorDisciplina", recs, r => r.disciplina || "(não informado)", "Disciplina",
+    key => goToReservasRelatorio({ curso: key })); // busca por texto também casa com disciplina
+  renderRUnidadeBreakdown(recs);
+}
+
+document.getElementById("dashRNte").addEventListener("change", renderDashboardReservas);
+document.getElementById("dashRMunicipio").addEventListener("change", renderDashboardReservas);
+
+function renderBreakdownReservasClick(tableId, recs, keyFn, label, onClick){
+  const map = {};
+  recs.forEach(r=>{
+    const k = keyFn(r);
+    if(!map[k]) map[k] = {count:0, carga:0};
+    map[k].count++;
+    map[k].carga += r.total;
+  });
+  const entries = Object.entries(map).sort((a,b)=>b[1].carga - a[1].carga);
+  const maxCarga = entries.length ? entries[0][1].carga : 1;
+  const table = document.getElementById(tableId);
+  let html = `<thead><tr><th>${label}</th><th>Vagas</th><th>Carga (h)</th><th></th></tr></thead><tbody>`;
+  entries.forEach(([k,v])=>{
+    const pct = Math.round(v.carga / maxCarga * 100);
+    html += `<tr class="clickable-row" data-key="${escapeHtml(k)}"><td>${escapeHtml(k)}</td><td>${v.count}</td><td>${v.carga}</td>
+      <td style="width:120px;"><div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div></td></tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
+  table.querySelectorAll("tr.clickable-row").forEach(tr=>{
+    tr.addEventListener("click", ()=> onClick(tr.dataset.key));
+  });
+}
+
+function renderRUnidadeBreakdown(recs){
+  const map = {};
+  recs.forEach(r=>{
+    const k = r.codUnidade;
+    if(!map[k]) map[k] = { uee:r.unidadeEscolar, municipio:r.municipio, count:0, carga:0 };
+    map[k].count++;
+    map[k].carga += r.total;
+  });
+  const entries = Object.entries(map).sort((a,b)=> b[1].carga - a[1].carga);
+  const maxCarga = entries.length ? entries[0][1].carga : 1;
+  const table = document.getElementById("tblRPorUnidade");
+  let html = `<thead><tr><th>Unidade Escolar</th><th>Município</th><th>Vagas</th><th>Carga (h)</th><th></th></tr></thead><tbody>`;
+  entries.forEach(([cod,v])=>{
+    const pct = Math.round(v.carga / maxCarga * 100);
+    html += `<tr class="clickable-row" data-cod="${escapeHtml(cod)}">
+      <td>${escapeHtml(v.uee)}</td><td>${escapeHtml(v.municipio)}</td><td>${v.count}</td><td>${v.carga}</td>
+      <td style="width:120px;"><div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div></td></tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
+  table.querySelectorAll("tr.clickable-row").forEach(tr=>{
+    tr.addEventListener("click", ()=> goToReservasRelatorio({ unidadeCod: tr.dataset.cod }));
+  });
+}
+
+/* Leva da Dashboard de Vagas Reservadas até o relatório "Vagas Reservadas por Unidade
+   Escolar" já filtrado — ou direto na ficha de uma única unidade, quando informado unidadeCod. */
+function goToReservasRelatorio({ municipio, curso, nte, unidadeCod } = {}){
+  switchTab("relatorios");
+  if(unidadeCod){
+    reservaUnidadeFocusCode = unidadeCod;
+    showReport("reservasUnidade");
+    return;
+  }
+  showReport("reservasUnidade");
+  if(municipio) document.getElementById("ruFiltroMunicipio").value = municipio;
+  if(nte) document.getElementById("ruFiltroNte").value = nte;
+  if(curso) document.getElementById("ruBusca").value = curso;
+  document.getElementById("ruFiltroMunicipio").dispatchEvent(new Event("change"));
 }
 
 document.querySelectorAll(".dash-mode-btn").forEach(btn=>{
@@ -2356,7 +2443,7 @@ function drawFichasReservas(fichas, filter, forceOpen, extraFiltros){
 
   let filtered = fichas;
   if(filter){
-    filtered = filtered.filter(f => (f.uee+" "+f.municipio+" "+f.rows.map(r=>r.curso).join(" ")).toLowerCase().includes(filter));
+    filtered = filtered.filter(f => (f.uee+" "+f.municipio+" "+f.rows.map(r=>r.curso+" "+r.disciplina).join(" ")).toLowerCase().includes(filter));
   }
   if(fNte){
     filtered = filtered.filter(f => (f.rows[0]?.nte || "") === fNte);
