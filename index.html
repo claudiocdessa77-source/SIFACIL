@@ -992,7 +992,9 @@ function parseHtmlTableToGrid(text){
 
 const RESERVAS_FIELD_MATCHERS = [
   { field:"identificador", test:h=> h.includes("IDENTIFICADOR") },
-  { field:"numProcesso",   test:h=> h.includes("PROCESSO") || h.includes("COPS") },
+  { field:"nte",           test:h=> h === "NTE" },
+  { field:"numCop",        test:h=> h.includes("COP") && !h.includes("PROCESSO") },
+  { field:"numProcesso",   test:h=> h.includes("PROCESSO") },
   { field:"numProfessor",  test:h=> h.includes("PROFESSOR") },
   { field:"disciplinaPrincipal", test:h=> h.includes("DISCIPLINA") && h.includes("PRINCIPAL") },
   { field:"codUnidade",    test:h=> h.includes("COD") && h.includes("UNIDADE") },
@@ -1053,6 +1055,7 @@ function parseVagasReservadasText(text){
 
     const rec = {
       identificador,
+      nte: get("nte"),
       municipio,
       unidadeEscolar: get("unidadeEscolar"),
       codUnidade: get("codUnidade"),
@@ -1060,6 +1063,7 @@ function parseVagasReservadasText(text){
       mat: Number(get("mat")) || 0,
       vesp: Number(get("vesp")) || 0,
       not: Number(get("not")) || 0,
+      numCop: get("numCop"),
       numProcesso: get("numProcesso"),
       numProfessor: get("numProfessor"),
       disciplinaPrincipal,
@@ -1075,13 +1079,30 @@ function parseVagasReservadasText(text){
   return { records, skipped, detectadas };
 }
 
+function decodeSmartCharset(buffer){
+  // Lê um trecho inicial como UTF-8 só para procurar um <meta charset="..."> declarado no próprio arquivo.
+  let declared = null;
+  try{
+    const prefix = new TextDecoder("utf-8").decode(buffer.slice(0, 4000));
+    const m = prefix.match(/charset=["']?([\w-]+)/i);
+    if(m) declared = m[1].toLowerCase();
+  }catch(e){ /* ignora, usa padrão abaixo */ }
+  const label = (declared && (declared.includes("8859") || declared.includes("1252"))) ? "iso-8859-1" : "utf-8";
+  try{
+    return new TextDecoder(label, {fatal:false}).decode(buffer);
+  }catch(e){
+    return new TextDecoder("utf-8", {fatal:false}).decode(buffer);
+  }
+}
+
 function handleFileReservas(file){
   const status = document.getElementById("importStatusReservas");
   status.innerHTML = `<span>Lendo arquivo…</span>`;
   const reader = new FileReader();
   reader.onload = function(e){
     try{
-      const { records, skipped, detectadas } = parseVagasReservadasText(e.target.result);
+      const text = decodeSmartCharset(e.target.result);
+      const { records, skipped, detectadas } = parseVagasReservadasText(text);
       STATE_RESERVAS.fileName = file.name;
       STATE_RESERVAS.importedAt = new Date().toISOString();
       STATE_RESERVAS.records = records;
@@ -1099,7 +1120,8 @@ function handleFileReservas(file){
   reader.onerror = function(){
     status.innerHTML = `<span class="status-err">✖ Não foi possível ler o arquivo.</span>`;
   };
-  reader.readAsText(file, "ISO-8859-1");
+  // Lido como bytes brutos; a codificação (UTF-8 ou ISO-8859-1) é detectada pelo <meta charset> do próprio arquivo.
+  reader.readAsArrayBuffer(file);
 }
 
 function renderImportInfoReservas(){
@@ -2297,10 +2319,10 @@ function renderReservasUnidade(){
   document.getElementById("btnCollapseAllRUnidade").onclick = ()=> document.querySelectorAll("#ruFichas .ficha-body").forEach(b=>b.classList.remove("open"));
   document.getElementById("btnPrintRUnidade").onclick = ()=> window.print();
   document.getElementById("btnExportRUnidade").onclick = ()=>{
-    const header = ["Município","Unidade","Cód. Unidade","Identificador","Disciplina","Curso","Nº Processo","Nº Professor","MAT","VESP","NOT","Total","Observações"];
+    const header = ["Município","NTE","Unidade","Cód. Unidade","Identificador","Disciplina","Curso","Nº COP","Nº Processo SEI","Nº Professor","MAT","VESP","NOT","Total","Observações"];
     const rows = [header];
     fichas.forEach(f=> f.rows.forEach(r=>{
-      rows.push([f.municipio,f.uee,f.codUnidade,r.identificador,r.disciplina,r.curso,r.numProcesso,r.numProfessor,r.mat,r.vesp,r.not,r.total,r.observacoes]);
+      rows.push([f.municipio,r.nte,f.uee,f.codUnidade,r.identificador,r.disciplina,r.curso,r.numCop,r.numProcesso,r.numProfessor,r.mat,r.vesp,r.not,r.total,r.observacoes]);
     }));
     downloadCsv("vagas_reservadas_por_unidade.csv", rows);
   };
@@ -2323,8 +2345,9 @@ function drawFichasReservas(fichas, filter, forceOpen){
         return `<tr>
           <td>${escapeHtml(r.disciplina)}</td>
           <td>${escapeHtml(r.curso) || "—"}</td>
+          <td>${escapeHtml(r.numCop) || "—"}</td>
           <td>${escapeHtml(r.numProcesso) || "—"}</td>
-          <td>${matriculaCell(r.numProfessor)}</td>
+          <td>${r.numProfessor ? matriculaCell(r.numProfessor) : "—"}</td>
           <td>${r.mat}</td><td>${r.vesp}</td><td>${r.not}</td><td><b>${r.total}</b></td>
           <td>${escapeHtml(r.observacoes) || "—"}</td>
         </tr>`;
@@ -2334,13 +2357,13 @@ function drawFichasReservas(fichas, filter, forceOpen){
       <div class="ficha-head" data-idx="ru-${fi}">
         <div>
           <div class="t">${escapeHtml(f.uee)}</div>
-          <div class="s">${escapeHtml(f.municipio)} · Cód. ${escapeHtml(f.codUnidade)} · ${f.rows.length} vaga(s) reservada(s)</div>
+          <div class="s">${escapeHtml(f.municipio)}${f.rows[0]?.nte ? " · NTE " + escapeHtml(f.rows[0].nte) : ""} · Cód. ${escapeHtml(f.codUnidade)} · ${f.rows.length} vaga(s) reservada(s)</div>
         </div>
         <div class="g">${f.total}h</div>
       </div>
       <div class="ficha-body" id="fbody-ru-${fi}">
         <table class="detail">
-          <thead><tr><th>Disciplina</th><th>Curso</th><th>Nº Processo</th><th>Matrícula</th><th>MAT</th><th>VESP</th><th>NOT</th><th>Total</th><th>Observações</th></tr></thead>
+          <thead><tr><th>Disciplina</th><th>Curso</th><th>Nº COP</th><th>Nº Processo SEI</th><th>Matrícula</th><th>MAT</th><th>VESP</th><th>NOT</th><th>Total</th><th>Observações</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>
