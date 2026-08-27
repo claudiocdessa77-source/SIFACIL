@@ -166,6 +166,7 @@
     border-radius:20px;letter-spacing:.3px;}
   .badge-cat.cat-carencias{background:#e3e9f5;color:var(--navy);}
   .badge-cat.cat-reservas{background:var(--ok-bg);color:var(--ok);}
+  .badge-cat.cat-encam{background:#ede7f6;color:#5e35b1;}
 
   .report-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
   .report-header .back{cursor:pointer;color:var(--navy);font-size:13px;font-weight:600;}
@@ -565,6 +566,12 @@
           <h3>Vagas Reservadas por Unidade Escolar</h3>
           <p>Relação completa de vagas já reservadas, agrupada por unidade escolar: disciplina, curso, nº do processo seletivo, matrícula do professor e observações.</p>
         </div>
+        <div class="report-card" data-report="encaminhamentos">
+          <span class="badge-cat cat-encam">ENCAMINHAMENTOS</span>
+          <div class="rc-icon">📨</div>
+          <h3>Encaminhamentos em Trâmite</h3>
+          <p>Importe o arquivo de Encaminhamentos em Trâmite direto aqui — o sistema filtra automaticamente e mostra só os registros do NTE 26.</p>
+        </div>
         <div class="report-card disabled">
           <div class="rc-icon">➕</div>
           <h3>Solicitar novo módulo</h3>
@@ -736,6 +743,51 @@
         <div>Nenhum resultado para esse filtro.</div>
       </div>
     </div>
+
+    <!-- Relatório: Encaminhamentos em Trâmite -->
+    <div id="report-encaminhamentos" style="display:none;">
+      <div class="report-header">
+        <div class="back back-encaminhamentos">← Voltar aos relatórios</div>
+        <div class="actions no-print">
+          <button class="btn btn-gold btn-sm" id="btnExportEncam" style="display:none;">⬇ Exportar CSV</button>
+          <button class="btn btn-primary btn-sm" id="btnPrintEncam" style="display:none;">🖨️ Imprimir / PDF</button>
+        </div>
+      </div>
+      <div class="card pad no-print" style="margin-bottom:16px;">
+        <h2 class="section-title">Encaminhamentos em Trâmite
+          <span class="badge-cat cat-encam" style="position:static;display:inline-block;vertical-align:middle;margin-left:8px;">ENCAMINHAMENTOS</span>
+        </h2>
+        <p class="section-sub">Importe o arquivo de Encaminhamentos em Trâmite abaixo. O sistema lê as colunas do próprio arquivo e filtra automaticamente, mostrando só os registros do <b>NTE 26</b>.</p>
+      </div>
+
+      <div class="card pad no-print" id="encamImportCard">
+        <div class="dropzone" id="dropzoneEncam">
+          <div class="icon">📄</div>
+          <div><b>Clique para selecionar</b> ou arraste o arquivo de Encaminhamentos em Trâmite aqui</div>
+          <div class="small">Formatos aceitos: .xls (HTML), .html, .htm</div>
+          <input type="file" id="fileInputEncam" accept=".xls,.html,.htm">
+        </div>
+        <div id="importStatusEncam"></div>
+        <table class="info-summary" id="importInfoEncam" style="display:none;"></table>
+        <div style="margin-top:16px;">
+          <button class="btn btn-danger" id="btnClearEncam" style="display:none;">🗑️ Limpar dados de Encaminhamentos</button>
+        </div>
+      </div>
+
+      <div id="encamContent" style="display:none;">
+        <div class="kpi-grid" style="margin:18px 0;">
+          <div class="kpi gold"><div class="label">Registros (NTE 26)</div><div class="value" id="kpiEncamTotal">0</div><div class="sub" id="kpiEncamSub"></div></div>
+        </div>
+        <div class="rowcount" id="encamRowcount"></div>
+        <div class="table-wrap">
+          <table class="data" id="encamTable">
+            <colgroup id="encamColgroup"></colgroup>
+            <thead><tr id="encamHead"></tr></thead>
+            <tbody id="encamBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -828,6 +880,17 @@ let STATE_RESERVAS = {
 };
 let dashboardModo = "carencias"; // "carencias" | "reservas" — controla qual visão o Dashboard mostra
 
+/* Banco separado: Encaminhamentos em Trâmite (genérico — colunas variáveis, filtrado sempre por NTE 26) */
+const ENCAM_STORAGE_KEY = "sf_encaminhamentos_v1";
+let STATE_ENCAM = {
+  fileName: null,
+  importedAt: null,
+  columns: [],   // [{id:"c0", label:"..."}]
+  records: [],   // [{c0:"...", c1:"...", ..., _id:"en1"}]
+  totalBrutas: 0,
+  foraDoNte26: 0
+};
+
 /* =========================================================
    PERSISTÊNCIA (localStorage)
 ========================================================= */
@@ -864,6 +927,23 @@ function loadStateReservas(){
       if(parsed && Array.isArray(parsed.records)) STATE_RESERVAS = parsed;
     }
   }catch(e){ console.warn("Falha ao carregar localStorage (reservas)", e); }
+}
+function saveStateEncam(){
+  try{
+    localStorage.setItem(ENCAM_STORAGE_KEY, JSON.stringify(STATE_ENCAM));
+  }catch(e){
+    console.warn("Falha ao salvar localStorage (encaminhamentos)", e);
+    showToast("⚠ Não consegui salvar os dados de Encaminhamentos no navegador.");
+  }
+}
+function loadStateEncam(){
+  try{
+    const raw = localStorage.getItem(ENCAM_STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && Array.isArray(parsed.records)) STATE_ENCAM = parsed;
+    }
+  }catch(e){ console.warn("Falha ao carregar localStorage (encaminhamentos)", e); }
 }
 
 /* =========================================================
@@ -1156,6 +1236,145 @@ function renderImportInfoReservas(){
     det.style.display = "none";
   }
 }
+
+/* =========================================================
+   ENCAMINHAMENTOS EM TRÂMITE — banco separado e genérico.
+   Não conhecemos de antemão as colunas deste arquivo, então:
+   1) usamos o mesmo parser tolerante a mesclas (parseHtmlTableToGrid);
+   2) localizamos a linha de cabeçalho procurando uma coluna "NTE";
+   3) montamos as colunas dinamicamente a partir do próprio cabeçalho;
+   4) filtramos automaticamente para manter só NTE = 26.
+========================================================= */
+function parseEncaminhamentosText(text){
+  const grid = parseHtmlTableToGrid(text);
+  if(grid.length < 2) throw new Error("Estrutura de tabela não reconhecida (poucas linhas).");
+
+  let headerIdx = -1, nteColIdx = -1;
+  for(let i=0;i<Math.min(6, grid.length);i++){
+    const norm = (grid[i]||[]).map(normalizeHeader);
+    const idx = norm.findIndex(h=> h === "NTE");
+    if(idx !== -1){ headerIdx = i; nteColIdx = idx; break; }
+  }
+  if(headerIdx === -1){
+    throw new Error('Não encontrei uma coluna "NTE" no cabeçalho (procurei nas primeiras linhas do arquivo). Confira se é a planilha certa.');
+  }
+
+  const headerRow = grid[headerIdx];
+  const columns = headerRow.map((label, idx)=> ({ id:"c"+idx, label:(label||"").toString().trim() || ("Coluna "+(idx+1)) }));
+
+  const records = [];
+  let skipped = 0, foraDoNte26 = 0, totalBrutas = 0;
+  for(let i=headerIdx+1;i<grid.length;i++){
+    const row = grid[i];
+    if(!row || row.every(c=>!c || !String(c).trim())){ continue; }
+    totalBrutas++;
+    const nteDigits = (row[nteColIdx] ?? "").toString().replace(/\D/g,"");
+    if(nteDigits !== "26"){ foraDoNte26++; continue; }
+    const rec = { _id: "en"+i };
+    columns.forEach((c, idx)=>{ rec[c.id] = (row[idx] ?? "").toString().trim(); });
+    records.push(rec);
+  }
+  skipped = totalBrutas - records.length - foraDoNte26 >= 0 ? 0 : 0; // reservado p/ futuras validações
+  if(records.length === 0){
+    throw new Error(`Nenhum registro do NTE 26 encontrado (${totalBrutas} linha(s) lida(s), todas de outros NTEs).`);
+  }
+  return { records, columns, totalBrutas, foraDoNte26 };
+}
+
+function handleFileEncam(file){
+  const status = document.getElementById("importStatusEncam");
+  status.innerHTML = `<span>Lendo arquivo…</span>`;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const text = decodeSmartCharset(e.target.result);
+      const { records, columns, totalBrutas, foraDoNte26 } = parseEncaminhamentosText(text);
+      STATE_ENCAM.fileName = file.name;
+      STATE_ENCAM.importedAt = new Date().toISOString();
+      STATE_ENCAM.columns = columns;
+      STATE_ENCAM.records = records;
+      STATE_ENCAM.totalBrutas = totalBrutas;
+      STATE_ENCAM.foraDoNte26 = foraDoNte26;
+      saveStateEncam();
+      status.innerHTML = `<span class="status-ok">✔ ${records.length} registro(s) do NTE 26 importado(s) (${foraDoNte26} de outros NTEs foram descartados automaticamente).</span>`;
+      renderImportInfoEncam();
+      renderEncamTable();
+    }catch(err){
+      status.innerHTML = `<span class="status-err">✖ Erro ao importar: ${err.message}</span>`;
+      console.error(err);
+    }
+  };
+  reader.onerror = function(){
+    status.innerHTML = `<span class="status-err">✖ Não foi possível ler o arquivo.</span>`;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderImportInfoEncam(){
+  const info = document.getElementById("importInfoEncam");
+  if(!STATE_ENCAM.records.length){ info.style.display="none"; return; }
+  info.style.display = "table";
+  const dt = new Date(STATE_ENCAM.importedAt);
+  info.innerHTML = `
+    <tr><td>Arquivo</td><td>${escapeHtml(STATE_ENCAM.fileName || "-")}</td></tr>
+    <tr><td>Importado em</td><td>${dt.toLocaleString("pt-BR")}</td></tr>
+    <tr><td>Registros do NTE 26</td><td>${STATE_ENCAM.records.length} (de ${STATE_ENCAM.totalBrutas} linha(s) no arquivo)</td></tr>
+  `;
+  document.getElementById("btnClearEncam").style.display = "inline-flex";
+}
+
+function renderEncamTable(){
+  const has = STATE_ENCAM.records.length > 0;
+  document.getElementById("encamContent").style.display = has ? "block" : "none";
+  document.getElementById("btnExportEncam").style.display = has ? "inline-flex" : "none";
+  document.getElementById("btnPrintEncam").style.display = has ? "inline-flex" : "none";
+  if(!has) return;
+
+  document.getElementById("kpiEncamTotal").textContent = STATE_ENCAM.records.length;
+  document.getElementById("kpiEncamSub").textContent = `de ${STATE_ENCAM.totalBrutas} linha(s) no arquivo · ${STATE_ENCAM.foraDoNte26} de outros NTEs descartada(s)`;
+  document.getElementById("encamRowcount").textContent = `${STATE_ENCAM.records.length} registro(s) · ${STATE_ENCAM.columns.length} coluna(s) detectada(s)`;
+
+  const widthPct = (100 / STATE_ENCAM.columns.length).toFixed(2);
+  document.getElementById("encamColgroup").innerHTML =
+    STATE_ENCAM.columns.map(()=> `<col style="width:${widthPct}%">`).join("");
+  document.getElementById("encamHead").innerHTML =
+    STATE_ENCAM.columns.map(c=> `<th>${escapeHtml(c.label)}</th>`).join("");
+  document.getElementById("encamBody").innerHTML =
+    STATE_ENCAM.records.map(r=>
+      `<tr>${STATE_ENCAM.columns.map(c=> `<td>${escapeHtml(r[c.id])}</td>`).join("")}</tr>`
+    ).join("");
+}
+
+document.getElementById("dropzoneEncam").addEventListener("click", ()=> document.getElementById("fileInputEncam").click());
+document.getElementById("fileInputEncam").addEventListener("change", e=>{
+  if(e.target.files[0]) handleFileEncam(e.target.files[0]);
+});
+["dragenter","dragover"].forEach(ev=>{
+  document.getElementById("dropzoneEncam").addEventListener(ev, e=>{ e.preventDefault(); document.getElementById("dropzoneEncam").classList.add("drag"); });
+});
+["dragleave","drop"].forEach(ev=>{
+  document.getElementById("dropzoneEncam").addEventListener(ev, e=>{ e.preventDefault(); document.getElementById("dropzoneEncam").classList.remove("drag"); });
+});
+document.getElementById("dropzoneEncam").addEventListener("drop", e=>{
+  const f = e.dataTransfer.files[0];
+  if(f) handleFileEncam(f);
+});
+document.getElementById("btnClearEncam").addEventListener("click", ()=>{
+  if(!confirm("Tem certeza que deseja apagar os dados de Encaminhamentos em Trâmite?")) return;
+  STATE_ENCAM = { fileName:null, importedAt:null, columns:[], records:[], totalBrutas:0, foraDoNte26:0 };
+  localStorage.removeItem(ENCAM_STORAGE_KEY);
+  document.getElementById("importStatusEncam").innerHTML = "";
+  document.getElementById("importInfoEncam").style.display = "none";
+  document.getElementById("btnClearEncam").style.display = "none";
+  document.getElementById("fileInputEncam").value = "";
+  renderEncamTable();
+});
+document.getElementById("btnExportEncam").addEventListener("click", ()=>{
+  const header = STATE_ENCAM.columns.map(c=>c.label);
+  const rows = [header, ...STATE_ENCAM.records.map(r=> STATE_ENCAM.columns.map(c=>r[c.id]))];
+  downloadCsv("encaminhamentos_nte26.csv", rows);
+});
+document.getElementById("btnPrintEncam").addEventListener("click", ()=> window.print());
 
 /* =========================================================
    HELPERS
@@ -1802,7 +2021,7 @@ document.querySelectorAll(".report-card[data-report]").forEach(card=>{
 });
 document.querySelectorAll(".back").forEach(b=> b.addEventListener("click", showReportList));
 
-const REPORT_PANELS = ["report-acumulo10","report-hierarquia","report-motivo","report-unidade","report-reservasUnidade"];
+const REPORT_PANELS = ["report-acumulo10","report-hierarquia","report-motivo","report-unidade","report-reservasUnidade","report-encaminhamentos"];
 
 function showReportList(){
   unidadeFocusCode = null;
@@ -1838,6 +2057,10 @@ function showReport(name){
   } else if(name === "reservasUnidade"){
     document.getElementById("report-reservasUnidade").style.display = "block";
     renderReservasUnidade();
+  } else if(name === "encaminhamentos"){
+    document.getElementById("report-encaminhamentos").style.display = "block";
+    renderImportInfoEncam();
+    renderEncamTable();
   }
 }
 
@@ -2537,6 +2760,7 @@ function refreshAllViews(){
 
 loadState();
 loadStateReservas();
+loadStateEncam();
 if(STATE.records.length){
   renderImportInfo();
   const dt = STATE.importedAt ? new Date(STATE.importedAt).toLocaleString("pt-BR") : "";
@@ -2548,6 +2772,13 @@ if(STATE_RESERVAS.records.length){
   const dtR = STATE_RESERVAS.importedAt ? new Date(STATE_RESERVAS.importedAt).toLocaleString("pt-BR") : "";
   document.getElementById("importStatusReservas").innerHTML =
     `<span class="status-ok">✔ ${STATE_RESERVAS.records.length} vagas reservadas carregadas automaticamente (sessão salva ${dtR ? "em " + dtR : "anteriormente"}).</span>`;
+}
+if(STATE_ENCAM.records.length){
+  renderImportInfoEncam();
+  renderEncamTable();
+  const dtE = STATE_ENCAM.importedAt ? new Date(STATE_ENCAM.importedAt).toLocaleString("pt-BR") : "";
+  document.getElementById("importStatusEncam").innerHTML =
+    `<span class="status-ok">✔ ${STATE_ENCAM.records.length} registros do NTE 26 carregados automaticamente (sessão salva ${dtE ? "em " + dtE : "anteriormente"}).</span>`;
 }
 refreshAllViews();
 if(STATE.records.length || STATE_RESERVAS.records.length){
