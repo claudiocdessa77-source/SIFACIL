@@ -1577,7 +1577,7 @@ function refreshHeaderMeta(){
 ========================================================= */
 function renderDashboard(){
   const hasCarencias = STATE.records.length > 0;
-  const hasReservas = STATE_RESERVAS.records.length > 0;
+  const hasReservas = !!STATE_RESERVAS.fileName;
   const hasAny = hasCarencias || hasReservas;
 
   document.getElementById("dashboardEmpty").style.display = hasAny ? "none" : "block";
@@ -2065,7 +2065,7 @@ function showReport(name){
     alert("Carregue a planilha de Carências na aba Importar antes de gerar este relatório.");
     return;
   }
-  if(precisaReservas && !STATE_RESERVAS.records.length){
+  if(precisaReservas && !STATE_RESERVAS.fileName){
     alert("Carregue a planilha de Vagas Reservadas na aba Importar antes de gerar este relatório.");
     return;
   }
@@ -2708,6 +2708,9 @@ function drawFichasReservas(fichas, filter, forceOpen, extraFiltros){
   }
 
   emptyEl.style.display = filtered.length ? "none" : "block";
+  emptyEl.innerHTML = STATE_RESERVAS.records.length
+    ? `<div class="big">🔍</div><div>Nenhum resultado para esse filtro.</div>`
+    : `<div class="big">📭</div><div>O arquivo foi importado, mas nenhuma vaga tem candidato aprovado no momento.<br>Assim que o arquivo vier com aprovados preenchidos, é só reimportar aqui.</div>`;
 
   container.innerHTML = filtered.map((f, fi)=>{
     const rowsHtml = f.rows
