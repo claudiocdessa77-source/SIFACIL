@@ -605,6 +605,10 @@
           <div class="kpi gold"><div class="label">Ainda não reservadas</div><div class="value" id="acmPendentes">0</div></div>
         </div>
       </div>
+      <div class="dash-mode-toggle no-print" id="acumuloModoToggle">
+        <button class="dash-mode-btn" data-modo="geral">Geral</button>
+        <button class="dash-mode-btn" data-modo="especial">Educação Especial</button>
+      </div>
       <div id="acumuloGroups"></div>
       <div id="acumuloEmpty" class="empty-state" style="display:none;">
         <div class="big">✅</div>
@@ -2122,10 +2126,31 @@ function computeAcumulo10(){
   return qualifying;
 }
 
+let acumuloModo = "geral"; // "geral" | "especial"
+function isEducacaoEspecial(g){
+  const alvo = normalizeHeader(g.modalidade === "Profissional" ? (g.eixo + " " + g.curso) : g.area);
+  return alvo.includes("EDUCACAO ESPECIAL");
+}
+
 function renderAcumulo10(){
-  const groups = computeAcumulo10();
+  const todosGrupos = computeAcumulo10();
   const container = document.getElementById("acumuloGroups");
   const emptyEl = document.getElementById("acumuloEmpty");
+
+  const geralGrupos = todosGrupos.filter(g=> !isEducacaoEspecial(g));
+  const especialGrupos = todosGrupos.filter(g=> isEducacaoEspecial(g));
+  const groups = acumuloModo === "especial" ? especialGrupos : geralGrupos;
+
+  const toggle = document.getElementById("acumuloModoToggle");
+  toggle.querySelectorAll(".dash-mode-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.modo === acumuloModo);
+    const count = b.dataset.modo === "especial" ? especialGrupos.length : geralGrupos.length;
+    b.textContent = (b.dataset.modo === "especial" ? "Educação Especial" : "Geral") + ` (${count})`;
+  });
+  toggle.onclick = null;
+  toggle.querySelectorAll(".dash-mode-btn").forEach(b=>{
+    b.onclick = ()=>{ acumuloModo = b.dataset.modo; renderAcumulo10(); };
+  });
 
   const totalVagas = groups.reduce((s,g)=>s+g.rows.length,0);
   const totalCarga = groups.reduce((s,g)=>s+g.total,0);
