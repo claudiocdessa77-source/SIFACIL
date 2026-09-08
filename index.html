@@ -185,6 +185,9 @@
   table.detail th{text-align:left;padding:6px 8px;color:var(--muted);font-size:10.5px;text-transform:uppercase;border-bottom:1px solid var(--border);}
   table.detail td{padding:7px 8px;border-bottom:1px solid #f1f3f7;}
   table.detail tr.already td{background:#f4faf6;}
+  table.detail tr.bloco-hachura td{
+    background-image: repeating-linear-gradient(135deg, rgba(18,39,68,0.05) 0px, rgba(18,39,68,0.05) 5px, transparent 5px, transparent 11px);
+  }
   .pill{padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;}
   .pill-yes{background:var(--ok-bg);color:var(--ok);}
   .pill-no{background:var(--warn-bg);color:var(--warn);}
@@ -286,6 +289,7 @@
     .print-only-dashboard .meta{font-size:11px;color:#444;}
     .kpi,.card{break-inside:avoid;page-break-inside:avoid;}
     table.breakdown .bar,table.breakdown th{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    table.detail tr.bloco-hachura td{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 
     .print-only{display:none;}
     body.printing-dados{background:#fff;}
@@ -2742,10 +2746,18 @@ function drawFichasReservas(fichas, filter, forceOpen, extraFiltros){
     : `<div class="big">📭</div><div>O arquivo foi importado, mas nenhuma vaga tem candidato aprovado no momento.<br>Assim que o arquivo vier com aprovados preenchidos, é só reimportar aqui.</div>`;
 
   container.innerHTML = filtered.map((f, fi)=>{
-    const rowsHtml = f.rows
-      .sort((a,b)=> b.total - a.total)
-      .map(r=>{
-        return `<tr>
+    // Agrupa as vagas por bloco de reserva (Identificador) para que fiquem contíguas,
+    // e alterna uma hachura leve entre um bloco e outro dentro da mesma unidade.
+    const rowsOrdenadas = f.rows.slice().sort((a,b)=>
+      (a.identificador||"").localeCompare(b.identificador||"") || (b.total - a.total)
+    );
+    let blocoAnterior = null, hachuraLigada = false;
+    const rowsHtml = rowsOrdenadas.map(r=>{
+        if(r.identificador !== blocoAnterior){
+          blocoAnterior = r.identificador;
+          hachuraLigada = !hachuraLigada;
+        }
+        return `<tr class="${hachuraLigada ? 'bloco-hachura' : ''}" title="Bloco: ${escapeHtml(r.identificador || '—')}">
           <td>${escapeHtml(r.disciplina)}</td>
           <td>${escapeHtml(r.curso) || "—"}</td>
           <td>${escapeHtml(r.numCop) || "—"}</td>
