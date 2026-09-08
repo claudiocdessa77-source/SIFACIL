@@ -594,9 +594,9 @@
       <div class="card pad" style="margin-bottom:16px;">
         <h2 class="section-title">Reserva por Acúmulo de Carga — Grupos com total ≥ 10h</h2>
         <p class="section-sub">
-          Critério: em cada unidade escolar, disciplinas da <b>mesma Área</b> (quando Educação Básica) ou do <b>mesmo Eixo + Curso</b>
-          (quando Educação Profissional) têm sua carga horária somada. Grupos cujo total atinja 10h ou mais são
-          recomendados para reserva. Linhas já marcadas como <b>RESERVADA</b> aparecem destacadas em verde.
+          Critério: em cada unidade escolar (mesmo NTE, Município e Cód. Unidade), disciplinas da <b>mesma Área</b> (quando Educação Básica) ou do <b>mesmo Eixo + Curso</b>
+          (quando Educação Profissional) têm sua carga horária somada. Grupos cujo total atinja 10h ou mais recebem o status <b>SUGESTIVA A RESERVA</b>.
+          Linhas cuja Reserva já esteja marcada como <b>RESERVADA</b> mantêm esse status.
         </p>
         <div class="kpi-grid" style="margin-top:14px;margin-bottom:0;">
           <div class="kpi"><div class="label">Grupos ≥ 10h</div><div class="value" id="acmGrupos">0</div></div>
@@ -2160,7 +2160,7 @@ function renderAcumulo10(){
           <td>${matriculaCell(r.cadastro)}</td>
           <td>${r.mat}</td><td>${r.vesp}</td><td>${r.not}</td>
           <td><b>${r.total}</b></td>
-          <td>${already ? '<span class="pill pill-yes">Já reservada</span>' : '<span class="pill pill-no">Recomendar reserva</span>'}</td>
+          <td>${already ? '<span class="pill pill-yes">RESERVADA</span>' : '<span class="pill pill-no">SUGESTIVA A RESERVA</span>'}</td>
         </tr>`;
       }).join("");
 
@@ -2199,7 +2199,7 @@ function renderAcumulo10(){
         rows.push([
           g.municipio, g.uee, g.codUnidade, g.modalidade, (g.modalidade==="Profissional"?g.eixo:g.area),
           g.curso || "", r.disciplina, r.motivo, r.servidor, r.cadastro, r.mat, r.vesp, r.not, r.total, g.total,
-          r.reserva, isReservada(r) ? "Já reservada" : "Recomendar reserva"
+          r.reserva, isReservada(r) ? "RESERVADA" : "SUGESTIVA A RESERVA"
         ]);
       });
     });
