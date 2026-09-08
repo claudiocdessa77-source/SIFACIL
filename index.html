@@ -2128,8 +2128,12 @@ function computeAcumulo10(){
 
 let acumuloModo = "geral"; // "geral" | "especial"
 function isEducacaoEspecial(g){
-  const alvo = normalizeHeader(g.modalidade === "Profissional" ? (g.eixo + " " + g.curso) : g.area);
-  return alvo.includes("EDUCACAO ESPECIAL");
+  const areaTxt = normalizeHeader(g.modalidade === "Profissional" ? (g.eixo + " " + g.curso) : g.area);
+  if(areaTxt.includes("EDUCACAO ESPECIAL")) return true;
+  return g.rows.some(r=>{
+    const txt = normalizeHeader((r.disciplina||"") + " " + (r.servidor||"") + " " + (r.motivo||""));
+    return txt.includes("EDUCACAO ESPECIAL") || /\bAEE\b/.test(txt);
+  });
 }
 
 function renderAcumulo10(){
