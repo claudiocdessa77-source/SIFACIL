@@ -1086,10 +1086,12 @@ const RESERVAS_FIELD_MATCHERS = [
   { field:"nte",           test:h=> h === "NTE" },
   { field:"numCop",        test:h=> h.includes("COP") && !h.includes("PROCESSO") },
   { field:"numProcesso",   test:h=> h.includes("PROCESSO") },
+  { field:"candidatosAprovados", test:h=> h.includes("APROVADO") },
   { field:"numProfessor",  test:h=> h.includes("PROFESSOR") },
+  { field:"motivo",        test:h=> h.includes("MOTIVO") },
   { field:"disciplinaPrincipal", test:h=> h.includes("DISCIPLINA") && h.includes("PRINCIPAL") },
   { field:"codUnidade",    test:h=> h.includes("COD") && h.includes("UNIDADE") },
-  { field:"unidadeEscolar",test:h=> h.includes("UNIDADE") && h.includes("ESCOLAR") },
+  { field:"unidadeEscolar",test:h=> (h.includes("UNIDADE") && h.includes("ESCOLAR")) || h === "UEE" },
   { field:"municipio",     test:h=> h.includes("MUNICIPIO") },
   { field:"curso",         test:h=> h.includes("CURSO") },
   { field:"observacoes",   test:h=> h.includes("OBSERVA") },
@@ -1127,20 +1129,32 @@ function parseVagasReservadasText(text){
 
   const detectadas = Object.entries(colMap).map(([field, idx])=> `${field} ← "${grid[headerIdx][idx]}"`);
 
+  // Modo: se o arquivo tem coluna "Candidatos Aprovados" (layout de Carência com reserva embutida),
+  // só entram no relatório as linhas em que essa coluna estiver preenchida (vaga com candidato aprovado).
+  // Se não tiver essa coluna, é o arquivo dedicado "RELAÇÃO DE VAGAS RESERVADAS" — todas as linhas contam, como sempre.
+  const usaFiltroAprovados = colMap.candidatosAprovados !== undefined;
+
   const records = [];
-  let skipped = 0;
+  let skipped = 0, foraDeAprovados = 0;
   let last = { identificador:"", curso:"", disciplinaPrincipal:"" };
   for(let i=headerIdx+1;i<grid.length;i++){
     const row = grid[i];
     if(!row || row.every(c=>!c || !String(c).trim())){ skipped++; continue; }
+    if(row.some(c=> String(c).toUpperCase().includes("SUBTOTAL"))){ skipped++; continue; }
     const get = f => (colMap[f] !== undefined ? (row[colMap[f]] ?? "").toString().trim() : "");
 
     const municipio = get("municipio");
     const disciplina = get("disciplina");
     if(!municipio && !disciplina){ skipped++; continue; }
 
+    if(usaFiltroAprovados){
+      const aprovado = get("candidatosAprovados");
+      if(!aprovado || aprovado === "-"){ foraDeAprovados++; continue; }
+    }
+
     // colunas agrupadas (mescladas): se vier vazia, herda da última linha preenchida
     let identificador = get("identificador"); if(identificador) last.identificador = identificador; else identificador = last.identificador;
+    if(!identificador) identificador = `${get("codUnidade")}-${disciplina}`; // sem coluna própria (layout Carência): sintetiza
     let curso = get("curso"); if(curso && curso !== "-") last.curso = curso; else curso = curso || last.curso;
     let disciplinaPrincipal = get("disciplinaPrincipal"); if(disciplinaPrincipal && disciplinaPrincipal !== "-") last.disciplinaPrincipal = disciplinaPrincipal; else disciplinaPrincipal = disciplinaPrincipal || last.disciplinaPrincipal;
 
@@ -1156,18 +1170,22 @@ function parseVagasReservadasText(text){
       not: Number(get("not")) || 0,
       numCop: get("numCop"),
       numProcesso: get("numProcesso"),
-      numProfessor: get("numProfessor"),
+      numProfessor: get("numProfessor") || (usaFiltroAprovados ? get("candidatosAprovados") : ""),
       disciplinaPrincipal,
       curso,
-      observacoes: get("observacoes"),
+      observacoes: get("observacoes") || (usaFiltroAprovados ? get("motivo") : ""),
       _id: "vr" + i
     };
     rec.total = Number(get("total")) || (rec.mat + rec.vesp + rec.not);
     records.push(rec);
   }
 
-  if(records.length === 0) throw new Error("Nenhum registro válido encontrado no arquivo.");
-  return { records, skipped, detectadas };
+  // Se o layout tem a coluna "Candidatos Aprovados" e leu certinho, mas hoje nenhuma vaga
+  // ainda tem candidato aprovado, isso não é um erro — é só "zero reservas por enquanto".
+  if(records.length === 0 && !usaFiltroAprovados){
+    throw new Error("Nenhum registro válido encontrado no arquivo.");
+  }
+  return { records, skipped, detectadas, usaFiltroAprovados, foraDeAprovados };
 }
 
 function decodeSmartCharset(buffer){
@@ -1178,11 +1196,16 @@ function decodeSmartCharset(buffer){
     const m = prefix.match(/charset=["']?([\w-]+)/i);
     if(m) declared = m[1].toLowerCase();
   }catch(e){ /* ignora, usa padrão abaixo */ }
-  const label = (declared && (declared.includes("8859") || declared.includes("1252"))) ? "iso-8859-1" : "utf-8";
+  // Padrão quando NÃO há <meta charset> declarado: os arquivos deste sistema (Carência, com ou sem
+  // "Candidatos Aprovados") não declaram charset e são ISO-8859-1. Só usamos UTF-8 quando o arquivo
+  // declarar isso explicitamente (caso do arquivo dedicado de Vagas Reservadas).
+  const label = declared
+    ? (declared.includes("utf") ? "utf-8" : "iso-8859-1")
+    : "iso-8859-1";
   try{
     return new TextDecoder(label, {fatal:false}).decode(buffer);
   }catch(e){
-    return new TextDecoder("utf-8", {fatal:false}).decode(buffer);
+    return new TextDecoder("iso-8859-1", {fatal:false}).decode(buffer);
   }
 }
 
@@ -1193,13 +1216,19 @@ function handleFileReservas(file){
   reader.onload = function(e){
     try{
       const text = decodeSmartCharset(e.target.result);
-      const { records, skipped, detectadas } = parseVagasReservadasText(text);
+      const { records, skipped, detectadas, usaFiltroAprovados, foraDeAprovados } = parseVagasReservadasText(text);
       STATE_RESERVAS.fileName = file.name;
       STATE_RESERVAS.importedAt = new Date().toISOString();
       STATE_RESERVAS.records = records;
       STATE_RESERVAS.colunasDetectadas = detectadas;
       saveStateReservas();
-      status.innerHTML = `<span class="status-ok">✔ ${records.length} vaga(s) reservada(s) importada(s)${skipped ? ` (${skipped} linhas vazias/inválidas ignoradas)` : ""}.</span>`;
+      if(usaFiltroAprovados){
+        status.innerHTML = records.length
+          ? `<span class="status-ok">✔ Arquivo no layout de Carência com "Candidatos Aprovados" — ${records.length} vaga(s) com candidato aprovado importada(s) (${foraDeAprovados} sem candidato aprovado ainda, ignoradas).</span>`
+          : `<span class="status-ok">✔ Arquivo lido corretamente (layout de Carência com "Candidatos Aprovados"), mas nenhuma vaga tem candidato aprovado no momento (${foraDeAprovados} vaga(s) verificada(s)).</span>`;
+      } else {
+        status.innerHTML = `<span class="status-ok">✔ ${records.length} vaga(s) reservada(s) importada(s)${skipped ? ` (${skipped} linhas vazias/inválidas ignoradas)` : ""}.</span>`;
+      }
       renderImportInfoReservas();
       dashboardModo = "reservas";
       refreshAllViews();
