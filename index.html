@@ -609,9 +609,13 @@
           <div class="kpi gold"><div class="label">Ainda não reservadas</div><div class="value" id="acmPendentes">0</div></div>
         </div>
       </div>
-      <div class="dash-mode-toggle no-print" id="acumuloModoToggle">
-        <button class="dash-mode-btn" data-modo="geral">Geral</button>
-        <button class="dash-mode-btn" data-modo="especial">Educação Especial</button>
+      <div class="no-print" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px;">
+        <div class="dash-mode-toggle" id="acumuloModoToggle" style="margin-bottom:0;">
+          <button class="dash-mode-btn" data-modo="geral">Geral</button>
+          <button class="dash-mode-btn" data-modo="especial">Educação Especial</button>
+        </div>
+        <input type="text" id="acumuloBusca" placeholder="🔎 Filtrar por unidade escolar..."
+          style="flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
       </div>
       <div id="acumuloGroups"></div>
       <div id="acumuloEmpty" class="empty-state" style="display:none;">
@@ -2147,7 +2151,12 @@ function renderAcumulo10(){
 
   const geralGrupos = todosGrupos.filter(g=> !isEducacaoEspecial(g));
   const especialGrupos = todosGrupos.filter(g=> isEducacaoEspecial(g));
-  const groups = acumuloModo === "especial" ? especialGrupos : geralGrupos;
+  let groups = acumuloModo === "especial" ? especialGrupos : geralGrupos;
+
+  const buscaInput = document.getElementById("acumuloBusca");
+  const buscaTxt = buscaInput.value.trim().toLowerCase();
+  if(buscaTxt) groups = groups.filter(g => g.uee.toLowerCase().includes(buscaTxt));
+  buscaInput.oninput = renderAcumulo10;
 
   const toggle = document.getElementById("acumuloModoToggle");
   toggle.querySelectorAll(".dash-mode-btn").forEach(b=>{
@@ -2172,6 +2181,9 @@ function renderAcumulo10(){
   if(!groups.length){
     container.innerHTML = "";
     emptyEl.style.display = "block";
+    emptyEl.innerHTML = buscaTxt
+      ? `<div class="big">🔍</div><div>Nenhuma unidade encontrada para "${escapeHtml(buscaInput.value.trim())}".</div>`
+      : `<div class="big">✅</div><div>Nenhum grupo atingiu 10h de carga somada com os dados atuais.</div>`;
     return;
   }
   emptyEl.style.display = "none";
