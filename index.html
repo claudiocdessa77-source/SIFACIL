@@ -328,6 +328,8 @@
     }
   }
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -810,6 +812,52 @@
 
 <script>
 /* =========================================================
+   NUVEM (Firebase / Firestore) — permite abrir os dados
+   importados em qualquer computador, não só no que importou.
+   Projeto reaproveitado: SAGP-CPM.
+========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCx7inhrOp6pbYCLWpLhNdcjwnDzOSwHBQ",
+  authDomain: "sagp-cpm.firebaseapp.com",
+  projectId: "sagp-cpm",
+  storageBucket: "sagp-cpm.firebasestorage.app",
+  messagingSenderId: "297456545194",
+  appId: "1:297456545194:web:80e06786114fc97ce58fd3"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const SIFACIL_COLLECTION = "sifacil_dados";
+let cloudDisponivel = true; // vira false se a nuvem falhar (regra de acesso, offline, etc.) — o app continua funcionando só localmente
+
+async function cloudSave(docId, data){
+  try{
+    await db.collection(SIFACIL_COLLECTION).doc(docId).set(data);
+    cloudDisponivel = true;
+    return true;
+  }catch(e){
+    console.warn("Falha ao salvar na nuvem ("+docId+")", e);
+    cloudDisponivel = false;
+    showToast("⚠ Não consegui sincronizar com a nuvem — os dados ficaram salvos só neste computador. Verifique as regras do Firestore (coleção sifacil_dados) ou a conexão.");
+    return false;
+  }
+}
+async function cloudLoad(docId){
+  try{
+    const snap = await db.collection(SIFACIL_COLLECTION).doc(docId).get();
+    cloudDisponivel = true;
+    return snap.exists ? snap.data() : null;
+  }catch(e){
+    console.warn("Falha ao carregar da nuvem ("+docId+")", e);
+    cloudDisponivel = false;
+    return null;
+  }
+}
+async function cloudDelete(docId){
+  try{ await db.collection(SIFACIL_COLLECTION).doc(docId).delete(); }
+  catch(e){ console.warn("Falha ao apagar na nuvem ("+docId+")", e); }
+}
+
+/* =========================================================
    ESTADO GLOBAL
 ========================================================= */
 const COLS = ["reserva","nte","municipio","uee","codUnidade","tipo","eixo","curso","area",
@@ -913,6 +961,7 @@ function saveState(){
     console.warn("Falha ao salvar localStorage", e);
     showToast("⚠ Não consegui salvar os dados no navegador (armazenamento cheio ou bloqueado). Recomendo manter o arquivo original.");
   }
+  cloudSave("carencias", STATE);
 }
 function loadState(){
   try{
@@ -923,6 +972,16 @@ function loadState(){
     }
   }catch(e){ console.warn("Falha ao carregar localStorage", e); }
 }
+async function loadStateCloud(){
+  const cloud = await cloudLoad("carencias");
+  if(cloud && Array.isArray(cloud.records)){
+    // só sobrescreve o local se a nuvem tiver algo mais recente
+    if(!STATE.importedAt || !cloud.importedAt || new Date(cloud.importedAt) >= new Date(STATE.importedAt)){
+      STATE = cloud;
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); }catch(e){}
+    }
+  }
+}
 function saveStateReservas(){
   try{
     localStorage.setItem(RESERVAS_STORAGE_KEY, JSON.stringify(STATE_RESERVAS));
@@ -930,6 +989,7 @@ function saveStateReservas(){
     console.warn("Falha ao salvar localStorage (reservas)", e);
     showToast("⚠ Não consegui salvar os dados de Vagas Reservadas no navegador.");
   }
+  cloudSave("reservas", STATE_RESERVAS);
 }
 function loadStateReservas(){
   try{
@@ -940,6 +1000,15 @@ function loadStateReservas(){
     }
   }catch(e){ console.warn("Falha ao carregar localStorage (reservas)", e); }
 }
+async function loadStateReservasCloud(){
+  const cloud = await cloudLoad("reservas");
+  if(cloud && Array.isArray(cloud.records)){
+    if(!STATE_RESERVAS.importedAt || !cloud.importedAt || new Date(cloud.importedAt) >= new Date(STATE_RESERVAS.importedAt)){
+      STATE_RESERVAS = cloud;
+      try{ localStorage.setItem(RESERVAS_STORAGE_KEY, JSON.stringify(STATE_RESERVAS)); }catch(e){}
+    }
+  }
+}
 function saveStateEncam(){
   try{
     localStorage.setItem(ENCAM_STORAGE_KEY, JSON.stringify(STATE_ENCAM));
@@ -947,6 +1016,7 @@ function saveStateEncam(){
     console.warn("Falha ao salvar localStorage (encaminhamentos)", e);
     showToast("⚠ Não consegui salvar os dados de Encaminhamentos no navegador.");
   }
+  cloudSave("encaminhamentos", STATE_ENCAM);
 }
 function loadStateEncam(){
   try{
@@ -956,6 +1026,15 @@ function loadStateEncam(){
       if(parsed && Array.isArray(parsed.records)) STATE_ENCAM = parsed;
     }
   }catch(e){ console.warn("Falha ao carregar localStorage (encaminhamentos)", e); }
+}
+async function loadStateEncamCloud(){
+  const cloud = await cloudLoad("encaminhamentos");
+  if(cloud && Array.isArray(cloud.records)){
+    if(!STATE_ENCAM.importedAt || !cloud.importedAt || new Date(cloud.importedAt) >= new Date(STATE_ENCAM.importedAt)){
+      STATE_ENCAM = cloud;
+      try{ localStorage.setItem(ENCAM_STORAGE_KEY, JSON.stringify(STATE_ENCAM)); }catch(e){}
+    }
+  }
 }
 
 /* =========================================================
@@ -1408,6 +1487,7 @@ document.getElementById("btnClearEncam").addEventListener("click", ()=>{
   document.getElementById("importInfoEncam").style.display = "none";
   document.getElementById("btnClearEncam").style.display = "none";
   document.getElementById("fileInputEncam").value = "";
+  cloudDelete("encaminhamentos");
   renderEncamTable();
 });
 document.getElementById("btnExportEncam").addEventListener("click", ()=>{
@@ -1544,6 +1624,7 @@ document.getElementById("btnClearData").addEventListener("click", ()=>{
   document.getElementById("importInfo").style.display = "none";
   document.getElementById("btnClearData").style.display = "none";
   fileInput.value = "";
+  cloudDelete("carencias");
   refreshAllViews();
 });
 
@@ -1572,6 +1653,7 @@ document.getElementById("btnClearDataReservas").addEventListener("click", ()=>{
   document.getElementById("colunasDetectadasReservas").style.display = "none";
   document.getElementById("btnClearDataReservas").style.display = "none";
   fileInputReservas.value = "";
+  cloudDelete("reservas");
   if(dashboardModo === "reservas") dashboardModo = "carencias";
   refreshAllViews();
 });
@@ -2843,36 +2925,75 @@ function refreshAllViews(){
   showReportList();
 }
 
+function atualizarStatusImportacao(){
+  if(STATE.records.length){
+    renderImportInfo();
+    const dt = STATE.importedAt ? new Date(STATE.importedAt).toLocaleString("pt-BR") : "";
+    document.getElementById("importStatus").innerHTML =
+      `<span class="status-ok">✔ ${STATE.records.length} registros carregados${dt ? " (atualizado em " + dt + ")" : ""}.</span>`;
+  }
+  if(STATE_RESERVAS.records.length){
+    renderImportInfoReservas();
+    const dtR = STATE_RESERVAS.importedAt ? new Date(STATE_RESERVAS.importedAt).toLocaleString("pt-BR") : "";
+    document.getElementById("importStatusReservas").innerHTML =
+      `<span class="status-ok">✔ ${STATE_RESERVAS.records.length} vagas reservadas carregadas${dtR ? " (atualizado em " + dtR + ")" : ""}.</span>`;
+  }
+  if(STATE_ENCAM.records.length){
+    renderImportInfoEncam();
+    renderEncamTable();
+    const dtE = STATE_ENCAM.importedAt ? new Date(STATE_ENCAM.importedAt).toLocaleString("pt-BR") : "";
+    document.getElementById("importStatusEncam").innerHTML =
+      `<span class="status-ok">✔ ${STATE_ENCAM.records.length} registros do NTE 26 carregados${dtE ? " (atualizado em " + dtE + ")" : ""}.</span>`;
+  }
+}
+
+// 1) Carrega rápido do cache local deste navegador — funciona mesmo offline
 loadState();
 loadStateReservas();
 loadStateEncam();
-if(STATE.records.length){
-  renderImportInfo();
-  const dt = STATE.importedAt ? new Date(STATE.importedAt).toLocaleString("pt-BR") : "";
-  document.getElementById("importStatus").innerHTML =
-    `<span class="status-ok">✔ ${STATE.records.length} registros carregados automaticamente (sessão salva ${dt ? "em " + dt : "anteriormente"}).</span>`;
-}
-if(STATE_RESERVAS.records.length){
-  renderImportInfoReservas();
-  const dtR = STATE_RESERVAS.importedAt ? new Date(STATE_RESERVAS.importedAt).toLocaleString("pt-BR") : "";
-  document.getElementById("importStatusReservas").innerHTML =
-    `<span class="status-ok">✔ ${STATE_RESERVAS.records.length} vagas reservadas carregadas automaticamente (sessão salva ${dtR ? "em " + dtR : "anteriormente"}).</span>`;
-}
-if(STATE_ENCAM.records.length){
-  renderImportInfoEncam();
-  renderEncamTable();
-  const dtE = STATE_ENCAM.importedAt ? new Date(STATE_ENCAM.importedAt).toLocaleString("pt-BR") : "";
-  document.getElementById("importStatusEncam").innerHTML =
-    `<span class="status-ok">✔ ${STATE_ENCAM.records.length} registros do NTE 26 carregados automaticamente (sessão salva ${dtE ? "em " + dtE : "anteriormente"}).</span>`;
-}
+atualizarStatusImportacao();
 refreshAllViews();
 if(STATE.records.length || STATE_RESERVAS.records.length){
   switchTab("dashboard");
-  const partes = [];
-  if(STATE.records.length) partes.push(`${STATE.records.length} carências`);
-  if(STATE_RESERVAS.records.length) partes.push(`${STATE_RESERVAS.records.length} vagas reservadas`);
-  showToast(`Dados recuperados: ${partes.join(" · ")} da sua última sessão.`);
 }
+
+// 2) Sincroniza com a nuvem: busca a versão mais recente (pode ter sido importada em
+// outro computador) e continua ouvindo mudanças em tempo real enquanto a página ficar aberta.
+function ouvirNuvem(docId, aplicar){
+  db.collection(SIFACIL_COLLECTION).doc(docId).onSnapshot(snap=>{
+    if(!snap.exists) return;
+    const data = snap.data();
+    aplicar(data);
+  }, err=>{
+    console.warn(`onSnapshot (${docId}) falhou`, err);
+    cloudDisponivel = false;
+  });
+}
+
+ouvirNuvem("carencias", data=>{
+  if(!Array.isArray(data.records)) return;
+  if(data.importedAt === STATE.importedAt && data.fileName === STATE.fileName) return;
+  STATE = data;
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); }catch(e){}
+  atualizarStatusImportacao();
+  refreshAllViews();
+});
+ouvirNuvem("reservas", data=>{
+  if(!Array.isArray(data.records)) return;
+  if(data.importedAt === STATE_RESERVAS.importedAt && data.fileName === STATE_RESERVAS.fileName) return;
+  STATE_RESERVAS = data;
+  try{ localStorage.setItem(RESERVAS_STORAGE_KEY, JSON.stringify(STATE_RESERVAS)); }catch(e){}
+  atualizarStatusImportacao();
+  refreshAllViews();
+});
+ouvirNuvem("encaminhamentos", data=>{
+  if(!Array.isArray(data.records)) return;
+  if(data.importedAt === STATE_ENCAM.importedAt && data.fileName === STATE_ENCAM.fileName) return;
+  STATE_ENCAM = data;
+  try{ localStorage.setItem(ENCAM_STORAGE_KEY, JSON.stringify(STATE_ENCAM)); }catch(e){}
+  atualizarStatusImportacao();
+  renderEncamTable();
+});
 </script>
 </body>
 </html>
