@@ -261,6 +261,8 @@
 
   footer{text-align:center;font-size:11px;color:var(--muted);padding:20px;}
 
+  .cod-link{cursor:pointer;border-bottom:1px dashed var(--gold);font-weight:700;color:inherit;}
+  .cod-link:hover{color:var(--gold);border-bottom-style:solid;}
   .matricula-link{color:var(--navy);font-weight:700;text-decoration:none;border-bottom:1px dashed var(--gold);cursor:pointer;}
   .matricula-link:hover{color:var(--gold);border-bottom-style:solid;}
 
@@ -281,6 +283,7 @@
     .ficha.print-hide{display:none !important;}
     .ffs-clear{display:none !important;}
     .ficha-filter-status{background:#fff !important;border-color:#ccc !important;}
+    .cod-link{border-bottom:none !important;}
     .matricula-link{color:inherit !important;text-decoration:none !important;border-bottom:none !important;}
     #sfToast{display:none !important;}
 
@@ -467,12 +470,22 @@
         <select id="dashRNte"><option value="">NTE (todos)</option></select>
         <select id="dashRMunicipio"><option value="">Município (todos)</option></select>
       </div>
+      <div class="dash-mode-toggle no-print" id="rVisaoToggle" style="margin-bottom:16px;">
+        <button class="dash-mode-btn" data-visao="resumo">📊 Resumo</button>
+        <button class="dash-mode-btn" data-visao="arvore">🗂️ Por NTE › Município › Unidade</button>
+      </div>
       <div class="kpi-grid">
         <div class="kpi gold"><div class="label">Vagas Reservadas</div><div class="value" id="kpiRVagas">0</div><div class="sub">registros na planilha</div></div>
         <div class="kpi"><div class="label">Carga Horária Total</div><div class="value" id="kpiRCarga">0</div><div class="sub">horas/aula somadas</div></div>
         <div class="kpi"><div class="label">Municípios</div><div class="value" id="kpiRMunicipios">0</div><div class="sub">municípios distintos</div></div>
         <div class="kpi"><div class="label">Unidades Escolares</div><div class="value" id="kpiRUnidades">0</div><div class="sub">unidades com vaga reservada</div></div>
         <div class="kpi"><div class="label">Cursos/Eixos distintos</div><div class="value" id="kpiRCursos">0</div><div class="sub">cursos envolvidos</div></div>
+      </div>
+      <div id="rResumoWrap">
+      <div class="card pad" style="margin-bottom:18px;">
+        <h2 class="section-title">Por NTE</h2>
+        <p class="section-sub no-print">Clique em uma linha para filtrar o painel por aquele NTE.</p>
+        <table class="breakdown" id="tblRPorNte"></table>
       </div>
       <div class="two-col">
         <div class="card pad">
@@ -499,6 +512,19 @@
         <div class="breakdown-scroll">
           <table class="breakdown" id="tblRPorDisciplina"></table>
         </div>
+      </div>
+      </div>
+
+      <div id="rArvoreWrap" style="display:none;">
+        <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <button class="btn btn-outline btn-sm" id="btnExpandAllRArv">Expandir todos</button>
+          <button class="btn btn-outline btn-sm" id="btnCollapseAllRArv">Recolher todos</button>
+          <button class="btn btn-gold btn-sm" id="btnExportRArv">⬇ Exportar CSV</button>
+          <button class="btn btn-primary btn-sm" id="btnPrintRArv">🖨️ Imprimir / PDF</button>
+          <span style="font-size:12px;color:var(--muted);">Segue os filtros de NTE e Município acima. Clique em cada nível para abrir.</span>
+        </div>
+        <div id="rArvore"></div>
+        <div id="rArvoreEmpty" class="empty-state" style="display:none;"><div class="big">📭</div><div>Nenhuma vaga reservada para esse filtro.</div></div>
       </div>
     </div>
   </section>
@@ -938,7 +964,8 @@ let STATE_RESERVAS = {
   records: [],       // { identificador, municipio, unidadeEscolar, codUnidade, disciplina, mat, vesp, not, total, numProcesso, numProfessor, disciplinaPrincipal, curso, observacoes, _id }
   colunasDetectadas: null
 };
-let dashboardModo = "carencias"; // "carencias" | "reservas" — controla qual visão o Dashboard mostra
+let dashboardModo = "carencias";
+let reservasVisao = "resumo"; // "resumo" | "arvore" // "carencias" | "reservas" — controla qual visão o Dashboard mostra
 
 /* Banco separado: Encaminhamentos em Trâmite (genérico — colunas variáveis, filtrado sempre por NTE 26) */
 const ENCAM_STORAGE_KEY = "sf_encaminhamentos_v1";
@@ -1507,6 +1534,25 @@ function escapeHtml(s){
 /* Matrícula clicável: copia o número e abre o SEC Online (não é possível
    preencher login/navegar dentro de um site de terceiros a partir daqui). */
 const SEC_ONLINE_URL = "http://www.sec.ba.gov.br/seconline/";
+/* Cód. Unidade clicável: copia o número para a área de transferência */
+function codCell(cod){
+  const v = String(cod ?? "").trim();
+  if(!v) return "—";
+  return `<span class="cod-link" onclick="event.stopPropagation();copiarCodigo('${escapeHtml(v)}')" title="Clique para copiar o código">${escapeHtml(v)}</span>`;
+}
+function copiarCodigo(cod){
+  const ok = ()=> showToast(`Cód. ${cod} copiado!`);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(cod).then(ok).catch(()=> showToast(`Não consegui copiar. Código: ${cod}`));
+  } else {
+    const tmp = document.createElement("textarea");
+    tmp.value = cod; tmp.style.position="fixed"; tmp.style.opacity="0";
+    document.body.appendChild(tmp); tmp.select();
+    try{ document.execCommand("copy"); ok(); }catch(e){ showToast(`Não consegui copiar. Código: ${cod}`); }
+    document.body.removeChild(tmp);
+  }
+}
+
 function matriculaCell(cadastro){
   const val = (cadastro || "").trim();
   if(!val || val === "-") return "—";
@@ -1743,6 +1789,108 @@ function renderDashboardReservas(){
   renderBreakdownReservasClick("tblRPorDisciplina", recs, r => r.disciplina || "(não informado)", "Disciplina",
     key => goToReservasRelatorio({ curso: key })); // busca por texto também casa com disciplina
   renderRUnidadeBreakdown(recs);
+  renderBreakdownReservasClick("tblRPorNte", recs, r => r.nte ? ("NTE " + r.nte) : "(não informado)", "NTE",
+    key => {
+      const nte = key.replace(/^NTE\s+/, "");
+      const sel = document.getElementById("dashRNte");
+      if([...sel.options].some(o=>o.value===nte)){ sel.value = nte; renderDashboardReservas(); }
+    });
+
+  // alternância Resumo × Árvore
+  document.querySelectorAll("#rVisaoToggle .dash-mode-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.visao === reservasVisao);
+    b.onclick = ()=>{ reservasVisao = b.dataset.visao; renderDashboardReservas(); };
+  });
+  document.getElementById("rResumoWrap").style.display = reservasVisao==="resumo" ? "block" : "none";
+  document.getElementById("rArvoreWrap").style.display = reservasVisao==="arvore" ? "block" : "none";
+  if(reservasVisao==="arvore") renderReservasArvore(recs);
+}
+
+/* Reservas em árvore: NTE › Município › Unidade Escolar › vagas */
+function renderReservasArvore(recs){
+  const tree = {};
+  recs.forEach(r=>{
+    const nte = r.nte || "(sem NTE)";
+    const mun = r.municipio || "(não informado)";
+    const ukey = r.codUnidade || r.unidadeEscolar;
+    if(!tree[nte]) tree[nte] = { total:0, vagas:0, municipios:{} };
+    const n = tree[nte]; n.total += r.total; n.vagas++;
+    if(!n.municipios[mun]) n.municipios[mun] = { total:0, vagas:0, unidades:{} };
+    const m = n.municipios[mun]; m.total += r.total; m.vagas++;
+    if(!m.unidades[ukey]) m.unidades[ukey] = { uee:r.unidadeEscolar, cod:r.codUnidade, total:0, rows:[] };
+    const u = m.unidades[ukey]; u.total += r.total; u.rows.push(r);
+  });
+
+  const box = document.getElementById("rArvore");
+  const ntes = Object.keys(tree).sort((a,b)=> a.localeCompare(b,"pt-BR",{numeric:true}));
+  document.getElementById("rArvoreEmpty").style.display = ntes.length ? "none" : "block";
+
+  box.innerHTML = ntes.map((nte, ni)=>{
+    const n = tree[nte];
+    const muns = Object.keys(n.municipios).sort((a,b)=> a.localeCompare(b,"pt-BR"));
+    const munsHtml = muns.map((mun, mi)=>{
+      const m = n.municipios[mun];
+      const unis = Object.values(m.unidades).sort((a,b)=> a.uee.localeCompare(b.uee,"pt-BR"));
+      const unisHtml = unis.map((u, ui)=>{
+        const id = `ra-${ni}-${mi}-${ui}`;
+        const rowsHtml = u.rows.slice().sort((a,b)=> (a.identificador||"").localeCompare(b.identificador||"") || b.total-a.total).map(r=>`
+          <tr>
+            <td>${escapeHtml(r.disciplina)}</td>
+            <td>${escapeHtml(r.curso) || "—"}</td>
+            <td>${escapeHtml(r.numCop) || "—"}</td>
+            <td>${escapeHtml(r.numProcesso) || "—"}</td>
+            <td>${r.mat}</td><td>${r.vesp}</td><td>${r.not}</td><td><b>${r.total}</b></td>
+            <td>${escapeHtml(r.observacoes) || "—"}</td>
+          </tr>`).join("");
+        return `<div class="lvl3">
+          <div class="lvl3-head" data-t="${id}">
+            <div><div class="t">${escapeHtml(u.uee)}</div><div class="s">Cód. ${codCell(u.cod)} · ${u.rows.length} vaga(s)</div></div>
+            <div class="g">${u.total}h</div>
+          </div>
+          <div class="lvl3-body" id="${id}">
+            <table class="detail">
+              <thead><tr><th>Disciplina</th><th>Curso</th><th>Nº COP</th><th>Nº Processo SEI</th><th>MAT</th><th>VESP</th><th>NOT</th><th>Total</th><th>Observações</th></tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }).join("");
+      const id2 = `ra-${ni}-${mi}`;
+      return `<div class="lvl2">
+        <div class="lvl2-head" data-t="${id2}">
+          <div><div class="t">${escapeHtml(mun)}</div><div class="s">${unis.length} unidade(s) · ${m.vagas} vaga(s)</div></div>
+          <div class="g">${m.total}h</div>
+        </div>
+        <div class="lvl2-body" id="${id2}">${unisHtml}</div>
+      </div>`;
+    }).join("");
+    const id1 = `ra-${ni}`;
+    return `<div class="lvl1">
+      <div class="lvl1-head" data-t="${id1}">
+        <div><div class="t">${/^\d+$/.test(nte) ? "NTE " + escapeHtml(nte) : escapeHtml(nte)}</div><div class="s">${muns.length} município(s) · ${n.vagas} vaga(s) reservada(s)</div></div>
+        <div class="g">${n.total}h<small>carga total</small></div>
+      </div>
+      <div class="lvl1-body" id="${id1}">${munsHtml}</div>
+    </div>`;
+  }).join("");
+
+  box.querySelectorAll("[data-t]").forEach(h=>{
+    h.addEventListener("click", ()=> document.getElementById(h.dataset.t).classList.toggle("open"));
+  });
+  document.getElementById("btnExpandAllRArv").onclick = ()=> box.querySelectorAll(".lvl1-body,.lvl2-body,.lvl3-body").forEach(e=>e.classList.add("open"));
+  document.getElementById("btnCollapseAllRArv").onclick = ()=> box.querySelectorAll(".lvl1-body,.lvl2-body,.lvl3-body").forEach(e=>e.classList.remove("open"));
+  document.getElementById("btnPrintRArv").onclick = ()=>{
+    // imprime tudo expandido
+    box.querySelectorAll(".lvl1-body,.lvl2-body,.lvl3-body").forEach(e=>e.classList.add("open"));
+    window.print();
+  };
+  document.getElementById("btnExportRArv").onclick = ()=>{
+    const header = ["NTE","Município","Unidade","Cód. Unidade","Identificador","Disciplina","Curso","Nº COP","Nº Processo SEI","MAT","VESP","NOT","Total","Observações"];
+    const rows = [header, ...recs.slice().sort((a,b)=>
+      (a.nte||"").localeCompare(b.nte||"","pt-BR",{numeric:true}) || (a.municipio||"").localeCompare(b.municipio||"","pt-BR") || (a.unidadeEscolar||"").localeCompare(b.unidadeEscolar||"","pt-BR")
+    ).map(r=>[r.nte,r.municipio,r.unidadeEscolar,r.codUnidade,r.identificador,r.disciplina,r.curso,r.numCop,r.numProcesso,r.mat,r.vesp,r.not,r.total,r.observacoes])];
+    downloadCsv("reservas_por_nte_municipio_unidade.csv", rows);
+  };
 }
 
 document.getElementById("dashRNte").addEventListener("change", renderDashboardReservas);
@@ -2295,7 +2443,7 @@ function renderAcumulo10(){
     <div class="group-card">
       <div class="group-head" data-idx="${gi}">
         <div>
-          <div class="gtitle">${escapeHtml(g.uee)} <span style="color:var(--muted);font-weight:500;">— ${escapeHtml(g.municipio)} · Cód. ${escapeHtml(g.codUnidade)}</span></div>
+          <div class="gtitle">${escapeHtml(g.uee)} <span style="color:var(--muted);font-weight:500;">— ${escapeHtml(g.municipio)} · Cód. ${codCell(g.codUnidade)}</span></div>
           <div class="gsub">${modalidadeTag} · ${g.rows.length} disciplina(s) · ${pendentesGrupo > 0 ? `<span style="color:var(--warn);font-weight:700;">${pendentesGrupo} pendente(s)</span>` : `<span style="color:var(--ok);font-weight:700;">tudo reservado</span>`}</div>
         </div>
         <div class="gtotal">${g.total}h<small>carga total</small></div>
@@ -2417,7 +2565,7 @@ function drawHierTree(tree, filter){
         }).join("");
         return `<div class="lvl3">
           <div class="lvl3-head" data-t="hl3-${mi}-${di}-${ui}">
-            <div><div class="t">${escapeHtml(u.key)}</div><div class="s">Cód. ${escapeHtml(u.codUnidade)} · ${u.rows.length} vaga(s)</div></div>
+            <div><div class="t">${escapeHtml(u.key)}</div><div class="s">Cód. ${codCell(u.codUnidade)} · ${u.rows.length} vaga(s)</div></div>
             <div class="g">${u.total}h</div>
           </div>
           <div class="lvl3-body" id="hl3-${mi}-${di}-${ui}">
@@ -2663,7 +2811,7 @@ function drawFichas(fichas, filter, forceOpen){
       <div class="ficha-head" data-idx="uni-${fi}">
         <div>
           <div class="t">${escapeHtml(f.uee)}</div>
-          <div class="s">${escapeHtml(f.municipio)} · NTE ${escapeHtml(f.nte)} · Cód. ${escapeHtml(f.codUnidade)} · ${f.rows.length} vaga(s)</div>
+          <div class="s">${escapeHtml(f.municipio)} · NTE ${escapeHtml(f.nte)} · Cód. ${codCell(f.codUnidade)} · ${f.rows.length} vaga(s)</div>
         </div>
         <div class="g">${f.total}h<small>${pct}% reservado</small></div>
       </div>
@@ -2866,7 +3014,7 @@ function drawFichasReservas(fichas, filter, forceOpen, extraFiltros){
       <div class="ficha-head" data-idx="ru-${fi}">
         <div>
           <div class="t">${escapeHtml(f.uee)}</div>
-          <div class="s">${escapeHtml(f.municipio)}${f.rows[0]?.nte ? " · NTE " + escapeHtml(f.rows[0].nte) : ""} · Cód. ${escapeHtml(f.codUnidade)} · ${f.rows.length} vaga(s) reservada(s)</div>
+          <div class="s">${escapeHtml(f.municipio)}${f.rows[0]?.nte ? " · NTE " + escapeHtml(f.rows[0].nte) : ""} · Cód. ${codCell(f.codUnidade)} · ${f.rows.length} vaga(s) reservada(s)</div>
         </div>
         <div class="g">${f.total}h</div>
       </div>
